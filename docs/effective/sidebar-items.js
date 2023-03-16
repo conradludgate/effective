@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["EffectResult"],"struct":["Okay","Shim"],"trait":["Effective","Exists","Get","TryAsyncIterator","TryFuture","TryGet","TryIterator"]};
+window.SIDEBAR_ITEMS = {"enum":["EffectResult"],"mod":["impls","wrappers"],"struct":["Okay","Shim"],"trait":["Effective","Exists","Get","TryAsyncIterator","TryFuture","TryGet","TryIterator"]};
