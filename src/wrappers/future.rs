@@ -5,7 +5,7 @@ use std::{
 
 use futures::Future;
 
-use crate::{EffectResult, Effective, Okay};
+use crate::{EffectResult, Effective};
 
 pub fn future<F>(future: F) -> FutureShim<F> {
     FutureShim { inner: future }
@@ -19,16 +19,17 @@ pin_project_lite::pin_project!(
 );
 
 impl<F: Future> Effective for FutureShim<F> {
-    type Item = Okay<F::Output>;
+    type Output = F::Output;
+    type Residual = !;
     type Yields = !;
     type Awaits = ();
 
     fn poll_effect(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> EffectResult<Self::Item, Self::Yields, Self::Awaits> {
+    ) -> EffectResult<Self::Output, Self::Residual, Self::Yields, Self::Awaits> {
         match self.project().inner.poll(cx) {
-            Poll::Ready(x) => EffectResult::Item(Okay(x)),
+            Poll::Ready(x) => EffectResult::Item(x),
             Poll::Pending => EffectResult::Pending(()),
         }
     }

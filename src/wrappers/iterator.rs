@@ -1,6 +1,6 @@
 use std::{pin::Pin, task::Context};
 
-use crate::{EffectResult, Effective, Okay};
+use crate::{EffectResult, Effective};
 
 pub fn iterator<I>(iterator: I) -> IteratorShim<I> {
     IteratorShim { inner: iterator }
@@ -13,16 +13,17 @@ pin_project_lite::pin_project!(
 );
 
 impl<I: Iterator> Effective for IteratorShim<I> {
-    type Item = Okay<I::Item>;
+    type Output = I::Item;
+    type Residual = !;
     type Yields = ();
     type Awaits = !;
 
     fn poll_effect(
         self: Pin<&mut Self>,
         _: &mut Context<'_>,
-    ) -> EffectResult<Self::Item, Self::Yields, Self::Awaits> {
+    ) -> EffectResult<Self::Output, Self::Residual, Self::Yields, Self::Awaits> {
         match self.project().inner.next() {
-            Some(x) => EffectResult::Item(Okay(x)),
+            Some(x) => EffectResult::Item(x),
             None => EffectResult::Done(()),
         }
     }

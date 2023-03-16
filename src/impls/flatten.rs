@@ -20,16 +20,16 @@ pin_project_lite::pin_project!(
 impl<E> Effective for Flatten<E>
 where
     E: Effective,
-    <E::Item as Try>::Output: Try + FromResidual<<E::Item as Try>::Residual>,
+    E::Output: Try + FromResidual<<E::Item as Try>::Residual>,
 {
-    type Item = <E::Item as Try>::Output;
+    type Output = E::Output;
     type Yields = E::Yields;
     type Awaits = E::Awaits;
 
     fn poll_effect(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> EffectResult<Self::Item, Self::Yields, Self::Awaits> {
+    ) -> EffectResult<Self::Output, Self::Residual, Self::Yields, Self::Awaits> {
         match self.project().inner.poll_effect(cx) {
             EffectResult::Item(x) => match x.branch() {
                 ControlFlow::Continue(x) => EffectResult::Item(x),
@@ -53,23 +53,24 @@ pin_project_lite::pin_project!(
 
 impl<E> Effective for FlattenOkay<E>
 where
-    E: Effective,
-    E::Item: Try<Residual = !>,
-    <E::Item as Try>::Output: Try,
+    E: Effective<Residual = !>,
+    E::Output: Try,
 {
-    type Item = <E::Item as Try>::Output;
+    type Output = <E::Output as Try>::Output;
+    type Residual = <E::Output as Try>::Residual;
     type Yields = E::Yields;
     type Awaits = E::Awaits;
 
     fn poll_effect(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> EffectResult<Self::Item, Self::Yields, Self::Awaits> {
+    ) -> EffectResult<Self::Output, Self::Residual, Self::Yields, Self::Awaits> {
         match self.project().inner.poll_effect(cx) {
             EffectResult::Item(x) => match x.branch() {
                 ControlFlow::Continue(x) => EffectResult::Item(x),
-                ControlFlow::Break(_) => unreachable!(),
+                ControlFlow::Break(x) => EffectResult::Failure(x),
             },
+            EffectResult::Failure(_) => unreachable!(),
             EffectResult::Done(x) => EffectResult::Done(x),
             EffectResult::Pending(x) => EffectResult::Pending(x),
         }
@@ -85,25 +86,25 @@ pin_project_lite::pin_project!(
         #[pin]
         pub(super) inner: E,
         #[pin]
-        pub(super) flatten: Option<<E::Item as Try>::Output>,
+        pub(super) flatten: Option<E::Output>,
     }
 );
 
 impl<E> Effective for FlattenItems<E>
 where
     E: Effective,
-    <E::Item as Try>::Output: Effective<Yields = ()>,
-    <<E::Item as Try>::Output as Effective>::Item: Try + FromResidual<<E::Item as Try>::Residual>,
-    <<E::Item as Try>::Output as Effective>::Awaits: MinExists<E::Awaits>,
+    E::Output: Effective<Yields = ()>,
+    <E::Output as Effective>::Item: Try + FromResidual<<E::Item as Try>::Residual>,
+    <E::Output as Effective>::Awaits: MinExists<E::Awaits>,
 {
-    type Item = <<E::Item as Try>::Output as Effective>::Item;
+    type Item = <E::Output as Effective>::Item;
     type Yields = E::Yields;
-    type Awaits = <<<E::Item as Try>::Output as Effective>::Awaits as MinExists<E::Awaits>>::Exists;
+    type Awaits = <<E::Output as Effective>::Awaits as MinExists<E::Awaits>>::Exists;
 
     fn poll_effect(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> EffectResult<Self::Item, Self::Yields, Self::Awaits> {
+    ) -> EffectResult<Self::Output, Self::Residual, Self::Yields, Self::Awaits> {
         let mut this = self.project();
         loop {
             if let Some(flatten) = this.flatten.as_mut().as_pin_mut() {

@@ -1,47 +1,36 @@
-use std::{
-    ops::{ControlFlow, FromResidual, Try},
-    pin::Pin,
-    task::Context,
-};
+use std::{pin::Pin, task::Context};
 
 use crate::{EffectResult, Effective};
 
 pin_project_lite::pin_project!(
     /// Produced by the [`collect()`](super::EffectiveExt::collect) method
-    pub struct Collect<E, R>
-    where
-        R: Try,
-    {
+    pub struct Collect<E, C> {
         #[pin]
         pub(super) inner: E,
-        pub(super) into: R::Output,
+        pub(super) into: C,
     }
 );
 
-impl<E, R> Effective for Collect<E, R>
+impl<E, C> Effective for Collect<E, C>
 where
     E: Effective<Yields = ()>,
-    R: Try + FromResidual<<E::Item as Try>::Residual>,
-    R::Output: Default + Extend<<E::Item as Try>::Output>,
+    C: Default + Extend<E::Output>,
 {
-    type Item = R;
+    type Output = C;
+    type Residual = E::Residual;
     type Yields = !;
     type Awaits = E::Awaits;
 
     fn poll_effect(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> EffectResult<Self::Item, Self::Yields, Self::Awaits> {
+    ) -> EffectResult<Self::Output, Self::Residual, Self::Yields, Self::Awaits> {
         let mut this = self.project();
         loop {
             match this.inner.as_mut().poll_effect(cx) {
-                EffectResult::Item(x) => match x.branch() {
-                    ControlFlow::Continue(x) => this.into.extend(Some(x)),
-                    ControlFlow::Break(x) => return EffectResult::Item(R::from_residual(x)),
-                },
-                EffectResult::Done(()) => {
-                    return EffectResult::Item(R::from_output(std::mem::take(this.into)))
-                }
+                EffectResult::Item(x) => this.into.extend(Some(x)),
+                EffectResult::Failure(x) => return EffectResult::Failure(x),
+                EffectResult::Done(()) => return EffectResult::Item(std::mem::take(this.into)),
                 EffectResult::Pending(x) => return EffectResult::Pending(x),
             }
         }

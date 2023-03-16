@@ -1,42 +1,34 @@
-use std::{
-    marker::PhantomData,
-    ops::{ControlFlow, FromResidual, Try},
-    pin::Pin,
-    task::Context,
-};
+use std::{pin::Pin, task::Context};
 
 use crate::{EffectResult, Effective};
 
 pin_project_lite::pin_project!(
     /// Produced by the [`map()`](super::EffectiveExt::map) method
-    pub struct Map<R, E, F> {
+    pub struct Map<E, F> {
         #[pin]
         pub(super) inner: E,
         pub(super) map: F,
-        pub(super) _marker: PhantomData<R>,
     }
 );
 
-impl<R, E, F> Effective for Map<R, E, F>
+impl<R, E, F> Effective for Map<E, F>
 where
     E: Effective,
-    R: Try + FromResidual<<E::Item as Try>::Residual>,
-    F: FnMut(<E::Item as Try>::Output) -> R::Output,
+    F: FnMut(E::Output) -> R,
 {
-    type Item = R;
+    type Output = R;
+    type Residual = E::Residual;
     type Yields = E::Yields;
     type Awaits = E::Awaits;
 
     fn poll_effect(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> EffectResult<Self::Item, Self::Yields, Self::Awaits> {
+    ) -> EffectResult<Self::Output, Self::Residual, Self::Yields, Self::Awaits> {
         let this = self.project();
         match this.inner.poll_effect(cx) {
-            EffectResult::Item(x) => match x.branch() {
-                ControlFlow::Continue(x) => EffectResult::Item(R::from_output((this.map)(x))),
-                ControlFlow::Break(x) => EffectResult::Item(R::from_residual(x)),
-            },
+            EffectResult::Item(x) => EffectResult::Item((this.map)(x)),
+            EffectResult::Failure(x) => EffectResult::Failure(x),
             EffectResult::Done(x) => EffectResult::Done(x),
             EffectResult::Pending(x) => EffectResult::Pending(x),
         }

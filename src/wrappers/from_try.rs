@@ -13,19 +13,20 @@ pin_project_lite::pin_project!(
 );
 
 impl<T: Try> Effective for FromTry<T> {
-    type Item = T;
+    type Output = T::Output;
+    type Residual = T::Residual;
     type Yields = !;
     type Awaits = !;
 
     fn poll_effect(
         self: Pin<&mut Self>,
         _: &mut Context<'_>,
-    ) -> EffectResult<Self::Item, Self::Yields, Self::Awaits> {
-        EffectResult::Item(
-            self.project()
-                .inner
-                .take()
-                .expect("polled after completion"),
-        )
+    ) -> EffectResult<T::Output, T::Residual, Self::Yields, Self::Awaits> {
+        let this = self.project();
+        let x = this.inner.take().expect("polled after completion");
+        match x.branch() {
+            std::ops::ControlFlow::Continue(x) => EffectResult::Item(x),
+            std::ops::ControlFlow::Break(x) => EffectResult::Failure(x),
+        }
     }
 }
