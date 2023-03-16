@@ -11,6 +11,16 @@ pub trait EffectiveExt: Effective {
     ///
     /// # Example
     /// 
+    /// ## Try:
+    /// 
+    /// ```
+    /// use effective::{impls::EffectiveExt, TryGet, Okay, wrappers};
+    /// let e = wrappers::from_try(Some(42));
+    ///
+    /// let v: Option<i32> = e.map::<Option<_>, _>(|x| x + 1).try_get();
+    /// assert_eq!(v, Some(43));
+    /// ```
+    /// 
     /// ## Futures:
     /// 
     /// ```

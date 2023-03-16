@@ -93,6 +93,16 @@
 <a href="#93" id="93">93</a>
 <a href="#94" id="94">94</a>
 <a href="#95" id="95">95</a>
+<a href="#96" id="96">96</a>
+<a href="#97" id="97">97</a>
+<a href="#98" id="98">98</a>
+<a href="#99" id="99">99</a>
+<a href="#100" id="100">100</a>
+<a href="#101" id="101">101</a>
+<a href="#102" id="102">102</a>
+<a href="#103" id="103">103</a>
+<a href="#104" id="104">104</a>
+<a href="#105" id="105">105</a>
 </pre><pre class="rust"><code><span class="kw">use </span>std::ops::{FromResidual, Try};
 
 <span class="kw">use crate</span>::{Effective, Shim};
@@ -105,6 +115,16 @@
     <span class="doccomment">/// Map the items in the effective
     ///
     /// # Example
+    /// 
+    /// ## Try:
+    /// 
+    /// ```
+    /// use effective::{impls::EffectiveExt, TryGet, Okay, wrappers};
+    /// let e = wrappers::from_try(Some(42));
+    ///
+    /// let v: Option&lt;i32&gt; = e.map::&lt;Option&lt;_&gt;, _&gt;(|x| x + 1).try_get();
+    /// assert_eq!(v, Some(43));
+    /// ```
     /// 
     /// ## Futures:
     /// 

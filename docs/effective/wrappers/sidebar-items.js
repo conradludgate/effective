@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["future","iterator"],"struct":["FutureShim","IteratorShim"]};
+window.SIDEBAR_ITEMS = {"fn":["from_try","future","iterator"],"struct":["FromTry","FutureShim","IteratorShim"]};
