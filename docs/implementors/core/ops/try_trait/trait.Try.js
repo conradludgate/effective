@@ -1,3 +1,0 @@
-(function() {var implementors = {
-"effective":[["impl&lt;T&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/ops/try_trait/trait.Try.html\" title=\"trait core::ops::try_trait::Try\">Try</a> for <a class=\"struct\" href=\"effective/struct.Okay.html\" title=\"struct effective::Okay\">Okay</a>&lt;T&gt;"]]
-};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

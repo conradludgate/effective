@@ -1,7 +1,7 @@
 use crate::{Effective, Shim};
 
 pub mod collect;
-// pub mod flatten;
+pub mod flatten;
 pub mod map;
 
 pub trait EffectiveExt: Effective {
@@ -50,30 +50,30 @@ pub trait EffectiveExt: Effective {
         }
     }
 
-    // /// Flatten the items in the effective
-    // ///
-    // /// # Example
-    // ///
-    // /// ```
-    // /// use effective::{impls::EffectiveExt, Get, Okay, wrappers};
-    // /// let e = wrappers::iterator([1, 2, 3, 4].into_iter())
-    // ///     // map returns a sub-effective that yields multiple items
-    // ///     .map(|x| wrappers::iterator(std::iter::repeat(x).take(x)));
-    // ///
-    // /// let v: Vec<usize> = e.flatten_items().collect().get();
-    // /// assert_eq!(v, [1, 2, 2, 3, 3, 3, 4, 4, 4, 4]);
-    // /// ```
-    // fn flatten(self) -> flatten::Flatten<Self>
-    // where
-    //     Self: Sized,
-    //     Self::Output: Effective<Yields = (), Residual = Self::Residual>,
-    //     <Self::Output as Effective>::Awaits: MinExists<Self::Awaits>,
-    // {
-    //     flatten::Flatten {
-    //         inner: self,
-    //         flatten: None,
-    //     }
-    // }
+    /// Flatten the items in the effective
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use effective::{impls::EffectiveExt, Get, wrappers};
+    /// let e = wrappers::iterator([1, 2, 3, 4].into_iter())
+    ///     // map returns a sub-effective that yields multiple items
+    ///     .map(|x| wrappers::iterator(std::iter::repeat(x).take(x)));
+    ///
+    /// let v: Vec<usize> = e.flatten().collect().get();
+    /// assert_eq!(v, [1, 2, 2, 3, 3, 3, 4, 4, 4, 4]);
+    /// ```
+    fn flatten(self) -> flatten::Flatten<Self>
+    where
+        Self: Sized,
+        Self::Output:
+            Effective<Awaits = Self::Awaits, Yields = Self::Yields, Residual = Self::Residual>,
+    {
+        flatten::Flatten {
+            inner: self,
+            flatten: None,
+        }
+    }
 
     // fn flatten(self) -> flatten::Flatten<Self>
     // where

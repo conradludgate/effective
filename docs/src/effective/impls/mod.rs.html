@@ -123,16 +123,7 @@
 <a href="#123" id="123">123</a>
 <a href="#124" id="124">124</a>
 <a href="#125" id="125">125</a>
-<a href="#126" id="126">126</a>
-<a href="#127" id="127">127</a>
-<a href="#128" id="128">128</a>
-<a href="#129" id="129">129</a>
-<a href="#130" id="130">130</a>
-<a href="#131" id="131">131</a>
-<a href="#132" id="132">132</a>
-</pre><pre class="rust"><code><span class="kw">use </span>std::ops::{FromResidual, Try};
-
-<span class="kw">use crate</span>::{private::MinExists, Effective, Shim};
+</pre><pre class="rust"><code><span class="kw">use crate</span>::{Effective, Shim};
 
 <span class="kw">pub mod </span>collect;
 <span class="kw">pub mod </span>flatten;
@@ -146,10 +137,10 @@
     /// ## Try:
     ///
     /// ```
-    /// use effective::{impls::EffectiveExt, TryGet, Okay, wrappers};
+    /// use effective::{impls::EffectiveExt, TryGet, wrappers};
     /// let e = wrappers::from_try(Some(42));
     ///
-    /// let v: Option&lt;i32&gt; = e.map::&lt;Option&lt;_&gt;, _&gt;(|x| x + 1).try_get();
+    /// let v: Option&lt;i32&gt; = e.map(|x| x + 1).try_get();
     /// assert_eq!(v, Some(43));
     /// ```
     ///
@@ -157,32 +148,30 @@
     ///
     /// ```
     /// # async fn foo() {
-    /// use effective::{impls::EffectiveExt, Okay, wrappers};
+    /// use effective::{impls::EffectiveExt, wrappers};
     /// let e = wrappers::future(async { 0 });
     ///
-    /// let v: i32 = e.map::&lt;Okay&lt;_&gt;, _&gt;(|x| x + 1).into_shim().await;
+    /// let v: i32 = e.map(|x| x + 1).into_shim().await;
     /// # }
     /// ```
     ///
     /// ## Iterators:
     ///
     /// ```
-    /// use effective::{impls::EffectiveExt, Get, Okay, wrappers};
+    /// use effective::{impls::EffectiveExt, Get, wrappers};
     /// let e = wrappers::iterator([1, 2, 3, 4].into_iter());
     ///
-    /// let v: Vec&lt;i32&gt; = e.map::&lt;Okay&lt;_&gt;, _&gt;(|x| x + 1).collect::&lt;Okay&lt;_&gt;&gt;().get();
+    /// let v: Vec&lt;i32&gt; = e.map(|x| x + 1).collect().get();
     /// assert_eq!(v, [2, 3, 4, 5]);
     /// ```
-    </span><span class="kw">fn </span>map&lt;R, F&gt;(<span class="self">self</span>, f: F) -&gt; map::Map&lt;R, <span class="self">Self</span>, F&gt;
+    </span><span class="kw">fn </span>map&lt;R, F&gt;(<span class="self">self</span>, f: F) -&gt; map::Map&lt;<span class="self">Self</span>, F&gt;
     <span class="kw">where
         </span><span class="self">Self</span>: Sized,
-        R: Try + FromResidual&lt;&lt;<span class="self">Self</span>::Item <span class="kw">as </span>Try&gt;::Residual&gt;,
-        F: FnMut(&lt;<span class="self">Self</span>::Item <span class="kw">as </span>Try&gt;::Output) -&gt; R::Output,
+        F: FnMut(<span class="self">Self</span>::Output) -&gt; R,
     {
         map::Map {
             inner: <span class="self">self</span>,
             map: f,
-            _marker: std::marker::PhantomData,
         }
     }
 
@@ -191,61 +180,58 @@
     /// # Example
     ///
     /// ```
-    /// use effective::{impls::EffectiveExt, Get, Okay, wrappers};
+    /// use effective::{impls::EffectiveExt, Get, wrappers};
     /// let e = wrappers::iterator([1, 2, 3, 4].into_iter())
     ///     // map returns a sub-effective that yields multiple items
-    ///     .map::&lt;Okay&lt;_&gt;, _&gt;(|x| wrappers::iterator(std::iter::repeat(x).take(x)));
+    ///     .map(|x| wrappers::iterator(std::iter::repeat(x).take(x)));
     ///
-    /// let v: Vec&lt;usize&gt; = e.flatten_items().collect::&lt;Okay&lt;_&gt;&gt;().get();
+    /// let v: Vec&lt;usize&gt; = e.flatten().collect().get();
     /// assert_eq!(v, [1, 2, 2, 3, 3, 3, 4, 4, 4, 4]);
     /// ```
-    </span><span class="kw">fn </span>flatten_items(<span class="self">self</span>) -&gt; flatten::FlattenItems&lt;<span class="self">Self</span>&gt;
+    </span><span class="kw">fn </span>flatten(<span class="self">self</span>) -&gt; flatten::Flatten&lt;<span class="self">Self</span>&gt;
     <span class="kw">where
         </span><span class="self">Self</span>: Sized,
-        &lt;<span class="self">Self</span>::Item <span class="kw">as </span>Try&gt;::Output: Effective&lt;Yields = ()&gt;,
-        &lt;&lt;<span class="self">Self</span>::Item <span class="kw">as </span>Try&gt;::Output <span class="kw">as </span>Effective&gt;::Item:
-            Try + FromResidual&lt;&lt;<span class="self">Self</span>::Item <span class="kw">as </span>Try&gt;::Residual&gt;,
-        &lt;&lt;<span class="self">Self</span>::Item <span class="kw">as </span>Try&gt;::Output <span class="kw">as </span>Effective&gt;::Awaits: MinExists&lt;<span class="self">Self</span>::Awaits&gt;,
+        <span class="self">Self</span>::Output:
+            Effective&lt;Awaits = <span class="self">Self</span>::Awaits, Yields = <span class="self">Self</span>::Yields, Residual = <span class="self">Self</span>::Residual&gt;,
     {
-        flatten::FlattenItems {
+        flatten::Flatten {
             inner: <span class="self">self</span>,
             flatten: <span class="prelude-val">None</span>,
         }
     }
 
-    <span class="kw">fn </span>flatten(<span class="self">self</span>) -&gt; flatten::Flatten&lt;<span class="self">Self</span>&gt;
-    <span class="kw">where
-        </span><span class="self">Self</span>: Sized,
-        &lt;<span class="self">Self</span>::Item <span class="kw">as </span>Try&gt;::Output: Try + FromResidual&lt;&lt;<span class="self">Self</span>::Item <span class="kw">as </span>Try&gt;::Residual&gt;,
-    {
-        flatten::Flatten { inner: <span class="self">self </span>}
-    }
+    <span class="comment">// fn flatten(self) -&gt; flatten::Flatten&lt;Self&gt;
+    // where
+    //     Self: Sized,
+    //     Self::Output: Try + FromResidual&lt;&lt;Self::Item as Try&gt;::Residual&gt;,
+    // {
+    //     flatten::Flatten { inner: self }
+    // }
 
-    <span class="kw">fn </span>flatten_okay(<span class="self">self</span>) -&gt; flatten::FlattenOkay&lt;<span class="self">Self</span>&gt;
-    <span class="kw">where
-        </span><span class="self">Self</span>: Sized,
-        <span class="self">Self</span>::Item: Try&lt;Residual = !&gt;,
-        &lt;<span class="self">Self</span>::Item <span class="kw">as </span>Try&gt;::Output: Try,
-    {
-        flatten::FlattenOkay { inner: <span class="self">self </span>}
-    }
+    // fn flatten_okay(self) -&gt; flatten::FlattenOkay&lt;Self&gt;
+    // where
+    //     Self: Sized,
+    //     Self::Item: Try&lt;Residual = !&gt;,
+    //     Self::Output: Try,
+    // {
+    //     flatten::FlattenOkay { inner: self }
+    // }
 
-    <span class="doccomment">/// Collect the items from this iterator into a collection
+    </span><span class="doccomment">/// Collect the items from this iterator into a collection
     ///
     /// # Example
     ///
     /// ```
-    /// use effective::{impls::EffectiveExt, Get, Okay, wrappers};
+    /// use effective::{impls::EffectiveExt, Get, wrappers};
     /// let e = wrappers::iterator([1, 2, 3, 4].into_iter());
     ///
-    /// let v: Vec&lt;i32&gt; = e.collect::&lt;Okay&lt;_&gt;&gt;().get();
+    /// let v: Vec&lt;i32&gt; = e.collect().get();
     /// ```
-    </span><span class="kw">fn </span>collect&lt;R&gt;(<span class="self">self</span>) -&gt; collect::Collect&lt;<span class="self">Self</span>, R&gt;
+    </span><span class="kw">fn </span>collect&lt;C&gt;(<span class="self">self</span>) -&gt; collect::Collect&lt;<span class="self">Self</span>, C&gt;
     <span class="kw">where
         </span><span class="self">Self</span>: Sized,
         <span class="self">Self</span>: Effective&lt;Yields = ()&gt;,
-        R: Try + FromResidual&lt;&lt;<span class="self">Self</span>::Item <span class="kw">as </span>Try&gt;::Residual&gt;,
-        R::Output: Default + Extend&lt;&lt;<span class="self">Self</span>::Item <span class="kw">as </span>Try&gt;::Output&gt;,
+        C: Default + Extend&lt;<span class="self">Self</span>::Output&gt;,
     {
         collect::Collect {
             inner: <span class="self">self</span>,

@@ -104,16 +104,32 @@
 <a href="#104" id="104">104</a>
 <a href="#105" id="105">105</a>
 <a href="#106" id="106">106</a>
+<a href="#107" id="107">107</a>
+<a href="#108" id="108">108</a>
+<a href="#109" id="109">109</a>
+<a href="#110" id="110">110</a>
+<a href="#111" id="111">111</a>
+<a href="#112" id="112">112</a>
+<a href="#113" id="113">113</a>
+<a href="#114" id="114">114</a>
+<a href="#115" id="115">115</a>
+<a href="#116" id="116">116</a>
+<a href="#117" id="117">117</a>
+<a href="#118" id="118">118</a>
+<a href="#119" id="119">119</a>
+<a href="#120" id="120">120</a>
+<a href="#121" id="121">121</a>
+<a href="#122" id="122">122</a>
 </pre><pre class="rust"><code><span class="attr">#![feature(try_trait_v2, never_type, async_iterator)]
 
 </span><span class="kw">use </span>std::{
-    ops::Try,
+    ops::{ControlFlow, FromResidual, Try},
     pin::Pin,
     task::{Context, Poll},
 };
 
 <span class="kw">mod </span>blankets;
-<span class="kw">pub use </span>blankets::{Okay, Shim};
+<span class="kw">pub use </span>blankets::Shim;
 <span class="kw">pub mod </span>impls;
 <span class="kw">pub mod </span>wrappers;
 
@@ -157,9 +173,11 @@
 <span class="kw">impl </span>Exists <span class="kw">for </span>() {}
 <span class="kw">impl </span>Exists <span class="kw">for </span>! {}
 
-<span class="kw">pub enum </span>EffectResult&lt;Item, Yield, Await&gt; {
+<span class="kw">pub enum </span>EffectResult&lt;Item, Failure, Yield, Await&gt; {
     <span class="doccomment">/// An item is ready
     </span>Item(Item),
+    <span class="doccomment">/// A failure occured
+    </span>Failure(Failure),
     <span class="doccomment">/// No more items will be ready
     </span>Done(Yield),
     <span class="doccomment">/// No items are ready yet
@@ -169,8 +187,10 @@
 <span class="doccomment">/// `Effective` encapsulates all possible effect types that
 /// Rust currently has. Fallability, Iterability and Awaitablilty.
 </span><span class="kw">pub trait </span>Effective {
-    <span class="doccomment">/// Models how this effective type can fail.
-    </span><span class="kw">type </span>Item: Try;
+    <span class="doccomment">/// What item does this effective type produce
+    </span><span class="kw">type </span>Output;
+    <span class="doccomment">/// What non-success types can this effective produce
+    </span><span class="kw">type </span>Residual;
     <span class="doccomment">/// Models whether this effective type can yield multiple values
     </span><span class="kw">type </span>Yields: Exists;
     <span class="doccomment">/// Models whether this effective type can await
@@ -179,7 +199,7 @@
     <span class="kw">fn </span>poll_effect(
         <span class="self">self</span>: Pin&lt;<span class="kw-2">&amp;mut </span><span class="self">Self</span>&gt;,
         cx: <span class="kw-2">&amp;mut </span>Context&lt;<span class="lifetime">&#39;_</span>&gt;,
-    ) -&gt; EffectResult&lt;<span class="self">Self</span>::Item, <span class="self">Self</span>::Yields, <span class="self">Self</span>::Awaits&gt;;
+    ) -&gt; EffectResult&lt;<span class="self">Self</span>::Output, <span class="self">Self</span>::Residual, <span class="self">Self</span>::Yields, <span class="self">Self</span>::Awaits&gt;;
 }
 
 <span class="doccomment">/// A useless trait with 0 possible effects.
@@ -190,25 +210,37 @@
 
 <span class="doccomment">/// [`Get`] + [`Try`]
 </span><span class="kw">pub trait </span>TryGet {
-    <span class="kw">type </span>Output: Try;
-    <span class="kw">fn </span>try_get(<span class="self">self</span>) -&gt; <span class="self">Self</span>::Output;
+    <span class="kw">type </span>Output;
+    <span class="kw">type </span>Residual;
+    <span class="kw">fn </span>try_get&lt;R&gt;(<span class="self">self</span>) -&gt; R
+    <span class="kw">where
+        </span>R: FromResidual&lt;<span class="self">Self</span>::Residual&gt; + Try&lt;Output = <span class="self">Self</span>::Output&gt;;
 }
 
 <span class="doccomment">/// [`Try`] + [`Future`](std::future::Future)
 </span><span class="kw">pub trait </span>TryFuture {
-    <span class="kw">type </span>Output: Try;
-    <span class="kw">fn </span>try_poll(<span class="self">self</span>: Pin&lt;<span class="kw-2">&amp;mut </span><span class="self">Self</span>&gt;, cx: <span class="kw-2">&amp;mut </span>Context&lt;<span class="lifetime">&#39;_</span>&gt;) -&gt; Poll&lt;<span class="self">Self</span>::Output&gt;;
+    <span class="kw">type </span>Output;
+    <span class="kw">type </span>Residual;
+    <span class="kw">fn </span>try_poll(
+        <span class="self">self</span>: Pin&lt;<span class="kw-2">&amp;mut </span><span class="self">Self</span>&gt;,
+        cx: <span class="kw-2">&amp;mut </span>Context&lt;<span class="lifetime">&#39;_</span>&gt;,
+    ) -&gt; Poll&lt;ControlFlow&lt;<span class="self">Self</span>::Residual, <span class="self">Self</span>::Output&gt;&gt;;
 }
 <span class="doccomment">/// [`Try`] + [`AsyncIterator`](std::async_iter::AsyncIterator)
 </span><span class="kw">pub trait </span>TryAsyncIterator {
-    <span class="kw">type </span>Output: Try;
-    <span class="kw">fn </span>try_poll_next(<span class="self">self</span>: Pin&lt;<span class="kw-2">&amp;mut </span><span class="self">Self</span>&gt;, cx: <span class="kw-2">&amp;mut </span>Context&lt;<span class="lifetime">&#39;_</span>&gt;) -&gt; Poll&lt;<span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Output&gt;&gt;;
+    <span class="kw">type </span>Output;
+    <span class="kw">type </span>Residual;
+    <span class="kw">fn </span>try_poll_next(
+        <span class="self">self</span>: Pin&lt;<span class="kw-2">&amp;mut </span><span class="self">Self</span>&gt;,
+        cx: <span class="kw-2">&amp;mut </span>Context&lt;<span class="lifetime">&#39;_</span>&gt;,
+    ) -&gt; Poll&lt;<span class="prelude-ty">Option</span>&lt;ControlFlow&lt;<span class="self">Self</span>::Residual, <span class="self">Self</span>::Output&gt;&gt;&gt;;
 }
 
 <span class="doccomment">/// [`Try`] + [`Iterator`]
 </span><span class="kw">pub trait </span>TryIterator {
-    <span class="kw">type </span>Output: Try;
-    <span class="kw">fn </span>try_next(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Output&gt;;
+    <span class="kw">type </span>Output;
+    <span class="kw">type </span>Residual;
+    <span class="kw">fn </span>try_next(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;ControlFlow&lt;<span class="self">Self</span>::Residual, <span class="self">Self</span>::Output&gt;&gt;;
 }
 </code></pre></div>
 </section></main><div id="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="effective" data-themes="" data-resource-suffix="" data-rustdoc-version="1.70.0-nightly (39f2657d1 2023-03-09)" data-search-js="search-8a59a8356673ec1f.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>

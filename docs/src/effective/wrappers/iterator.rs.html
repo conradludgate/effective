@@ -27,9 +27,10 @@
 <a href="#27" id="27">27</a>
 <a href="#28" id="28">28</a>
 <a href="#29" id="29">29</a>
+<a href="#30" id="30">30</a>
 </pre><pre class="rust"><code><span class="kw">use </span>std::{pin::Pin, task::Context};
 
-<span class="kw">use crate</span>::{EffectResult, Effective, Okay};
+<span class="kw">use crate</span>::{EffectResult, Effective};
 
 <span class="kw">pub fn </span>iterator&lt;I&gt;(iterator: I) -&gt; IteratorShim&lt;I&gt; {
     IteratorShim { inner: iterator }
@@ -42,16 +43,17 @@
 );
 
 <span class="kw">impl</span>&lt;I: Iterator&gt; Effective <span class="kw">for </span>IteratorShim&lt;I&gt; {
-    <span class="kw">type </span>Item = Okay&lt;I::Item&gt;;
+    <span class="kw">type </span>Output = I::Item;
+    <span class="kw">type </span>Residual = !;
     <span class="kw">type </span>Yields = ();
     <span class="kw">type </span>Awaits = !;
 
     <span class="kw">fn </span>poll_effect(
         <span class="self">self</span>: Pin&lt;<span class="kw-2">&amp;mut </span><span class="self">Self</span>&gt;,
         <span class="kw">_</span>: <span class="kw-2">&amp;mut </span>Context&lt;<span class="lifetime">&#39;_</span>&gt;,
-    ) -&gt; EffectResult&lt;<span class="self">Self</span>::Item, <span class="self">Self</span>::Yields, <span class="self">Self</span>::Awaits&gt; {
+    ) -&gt; EffectResult&lt;<span class="self">Self</span>::Output, <span class="self">Self</span>::Residual, <span class="self">Self</span>::Yields, <span class="self">Self</span>::Awaits&gt; {
         <span class="kw">match </span><span class="self">self</span>.project().inner.next() {
-            <span class="prelude-val">Some</span>(x) =&gt; EffectResult::Item(Okay(x)),
+            <span class="prelude-val">Some</span>(x) =&gt; EffectResult::Item(x),
             <span class="prelude-val">None </span>=&gt; EffectResult::Done(()),
         }
     }
