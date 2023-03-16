@@ -1,7 +1,7 @@
 use std::{
     async_iter::AsyncIterator,
     future::Future,
-    ops::{ControlFlow, Try, FromResidual},
+    ops::{ControlFlow, FromResidual, Try},
     pin::{pin, Pin},
     task::{Context, Poll},
 };

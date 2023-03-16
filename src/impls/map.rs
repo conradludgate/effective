@@ -1,6 +1,6 @@
 use std::{
     marker::PhantomData,
-    ops::{ControlFlow, Try, FromResidual},
+    ops::{ControlFlow, FromResidual, Try},
     pin::Pin,
     task::Context,
 };

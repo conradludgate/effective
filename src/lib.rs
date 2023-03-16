@@ -12,9 +12,39 @@ pub mod impls;
 pub mod wrappers;
 
 mod private {
-    pub trait Sealed {}
-    impl Sealed for () {}
-    impl Sealed for ! {}
+    use crate::Exists;
+
+    pub trait Sealed {
+        fn new() -> Self;
+    }
+    impl Sealed for () {
+        fn new() -> Self {}
+    }
+    impl Sealed for ! {
+        fn new() -> Self {
+            unreachable!()
+        }
+    }
+
+    pub trait MinExists<Lhs> {
+        type Exists: Exists;
+    }
+
+    impl MinExists<()> for () {
+        type Exists = ();
+    }
+
+    impl MinExists<()> for ! {
+        type Exists = ();
+    }
+
+    impl MinExists<!> for () {
+        type Exists = ();
+    }
+
+    impl MinExists<!> for ! {
+        type Exists = !;
+    }
 }
 
 pub trait Exists: private::Sealed {}
