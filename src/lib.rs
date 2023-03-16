@@ -26,30 +26,42 @@ mod private {
         }
     }
 
-    pub trait MinExists<Lhs> {
-        type Exists: Exists;
+    pub trait Combine<Rhs>: Sized {
+        type Max: Exists;
+        fn into_max(self) -> Self::Max {
+            <Self::Max>::new()
+        }
+        fn from_rhs(_: Rhs) -> Self::Max {
+            <Self::Max>::new()
+        }
     }
 
-    impl MinExists<()> for () {
-        type Exists = ();
+    impl Combine<()> for () {
+        type Max = ();
     }
 
-    impl MinExists<()> for ! {
-        type Exists = ();
+    impl Combine<()> for ! {
+        type Max = ();
     }
 
-    impl MinExists<!> for () {
-        type Exists = ();
+    impl Combine<!> for () {
+        type Max = ();
     }
 
-    impl MinExists<!> for ! {
-        type Exists = !;
+    impl Combine<!> for ! {
+        type Max = !;
     }
 }
 
-pub trait Exists: private::Sealed {}
-impl Exists for () {}
-impl Exists for ! {}
+pub trait Exists: private::Sealed {
+    const EXISTS: bool;
+}
+impl Exists for () {
+    const EXISTS: bool = true;
+}
+impl Exists for ! {
+    const EXISTS: bool = false;
+}
 
 pub enum EffectResult<Item, Failure, Yield, Await> {
     /// An item is ready

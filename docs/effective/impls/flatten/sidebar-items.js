@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["Flatten"]};
+window.SIDEBAR_ITEMS = {"struct":["Flatten","FlattenError"]};

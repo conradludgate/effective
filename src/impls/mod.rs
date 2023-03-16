@@ -1,8 +1,12 @@
-use crate::{Effective, Shim};
+use crate::{Effective, Shim, private::Combine};
+
+use self::block::Executor;
 
 pub mod collect;
 pub mod flatten;
 pub mod map;
+pub mod block;
+pub mod unwrap;
 
 pub trait EffectiveExt: Effective {
     /// Map the items in the effective
@@ -54,20 +58,52 @@ pub trait EffectiveExt: Effective {
     ///
     /// # Example
     ///
+    /// ## Iterators:
+    ///
     /// ```
     /// use effective::{impls::EffectiveExt, Get, wrappers};
     /// let e = wrappers::iterator([1, 2, 3, 4].into_iter())
-    ///     // map returns a sub-effective that yields multiple items
+    ///     // map to return a sub iterator
     ///     .map(|x| wrappers::iterator(std::iter::repeat(x).take(x)));
     ///
     /// let v: Vec<usize> = e.flatten().collect().get();
     /// assert_eq!(v, [1, 2, 2, 3, 3, 3, 4, 4, 4, 4]);
     /// ```
+    ///
+    /// ## Futures:
+    ///
+    /// ```
+    /// # async fn foo() {
+    /// use effective::{impls::EffectiveExt, wrappers};
+    /// let e = wrappers::future(async { 1 })
+    ///     // map to return a sub future
+    ///     .map(|x| wrappers::future(async move { x + 1 }));
+    ///
+    /// let v: i32 = e.flatten().into_shim().await;
+    /// assert_eq!(v, 2);
+    /// # }
+    /// ```
+    /// 
+    /// ## Combined:
+    ///
+    /// ```
+    /// # async fn foo() {
+    /// use effective::{impls::EffectiveExt, wrappers};
+    /// let e = wrappers::iterator([1, 2, 3, 4].into_iter())
+    ///     // map to return a sub future
+    ///     .map(|x| wrappers::future(async move { x + 1 }));
+    ///
+    /// let v: Vec<usize> = e.flatten().collect().into_shim().await;
+    /// assert_eq!(v, [2, 3, 4, 5]);
+    /// # }
+    /// ```
     fn flatten(self) -> flatten::Flatten<Self>
     where
         Self: Sized,
-        Self::Output:
-            Effective<Awaits = Self::Awaits, Yields = Self::Yields, Residual = Self::Residual>,
+        Self::Output: Effective,
+        Self::Yields: Combine<<Self::Output as Effective>::Yields>,
+        Self::Awaits: Combine<<Self::Output as Effective>::Awaits>,
+        Self::Residual: Into<<Self::Output as Effective>::Residual>,
     {
         flatten::Flatten {
             inner: self,
@@ -75,24 +111,23 @@ pub trait EffectiveExt: Effective {
         }
     }
 
-    // fn flatten(self) -> flatten::Flatten<Self>
-    // where
-    //     Self: Sized,
-    //     Self::Output: Try + FromResidual<<Self::Item as Try>::Residual>,
-    // {
-    //     flatten::Flatten { inner: self }
-    // }
+    fn flatten_error(self) -> flatten::FlattenError<Self>
+    where
+        Self: Sized,
+        Self: Effective<Residual = !>,
+        Self::Output: Effective,
+        Self::Yields: Combine<<Self::Output as Effective>::Yields>,
+        Self::Awaits: Combine<<Self::Output as Effective>::Awaits>,
+    {
+        flatten::FlattenError {
+            inner: self,
+            flatten: None,
+        }
+    }
 
-    // fn flatten_okay(self) -> flatten::FlattenOkay<Self>
-    // where
-    //     Self: Sized,
-    //     Self::Item: Try<Residual = !>,
-    //     Self::Output: Try,
-    // {
-    //     flatten::FlattenOkay { inner: self }
-    // }
-
-    /// Collect the items from this iterator into a collection
+    /// Collect the items from this iterator into a collection.
+    /// 
+    /// Can be thought of as subtracting the 'iterable' effect.
     ///
     /// # Example
     ///
@@ -111,6 +146,63 @@ pub trait EffectiveExt: Effective {
         collect::Collect {
             inner: self,
             into: Default::default(),
+        }
+    }
+
+    /// Block on the async effective
+    /// 
+    /// Can be thought of as subtracting the 'async' effect.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use effective::{impls::EffectiveExt, Get, wrappers};
+    /// 
+    /// use effective::impls::block::FuturesExecutor;
+    /// let exec = FuturesExecutor::default();
+    /// 
+    /// let e = wrappers::iterator([1, 2, 3, 4].into_iter())
+    ///     .map(|x| wrappers::future(async move { x + 1 }))
+    ///     .flatten();
+    ///
+    /// let v: Vec<i32> = e.block(exec).collect().get();
+    /// assert_eq!(v, [2, 3, 4, 5]);
+    /// ```
+    fn block<R>(self, executor: R) -> block::Block<Self, R>
+    where
+        Self: Sized,
+        Self: Effective<Awaits = ()>,
+        R: Executor,
+    {
+        block::Block {
+            inner: self,
+            executor,
+        }
+    }
+
+    /// Block on the async effective
+    /// 
+    /// Can be thought of as subtracting the 'fallable' effect.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use effective::{impls::EffectiveExt, Get, wrappers};
+    /// 
+    /// let e = wrappers::iterator([1_i32, 2, 3, 4].into_iter())
+    ///     .map(|x| wrappers::from_try(x.checked_add(1)))
+    ///     .flatten_error();
+    ///
+    /// let v: Vec<i32> = e.unwrap().collect().get();
+    /// assert_eq!(v, [2, 3, 4, 5]);
+    /// ```
+    fn unwrap(self) -> unwrap::Unwrap<Self>
+    where
+        Self: Sized,
+        Self::Residual: std::fmt::Debug,
+    {
+        unwrap::Unwrap {
+            inner: self,
         }
     }
 
