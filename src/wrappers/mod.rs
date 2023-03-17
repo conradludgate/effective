@@ -1,3 +1,5 @@
+//! Where common [`Effective`](crate::Effective) wrapper constructors live
+
 mod fallible;
 mod from_fn;
 mod future;

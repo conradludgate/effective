@@ -1,6 +1,6 @@
 use std::{convert::Infallible, pin::Pin, task::Context};
 
-use crate::{Asynchronous, Blocking, EffectResult, Effective, Single};
+use crate::{Asynchronous, Blocking, EffectResult, Effective, Single, Fails};
 
 /// Create a raw `Effective` from a function
 pub fn from_fn<F>(f: F) -> FromFn<F> {
@@ -21,6 +21,7 @@ pin_project_lite::pin_project!(
 impl<F, Item, Failure, Produces, Async> Effective for FromFn<F>
 where
     F: FnMut(&mut Context<'_>) -> EffectResult<Item, Failure, Produces, Async>,
+    Failure: Fails,
     Produces: crate::Produces,
     Async: Asynchronous,
 {

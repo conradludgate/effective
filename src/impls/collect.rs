@@ -2,7 +2,7 @@
 
 use std::{pin::Pin, task::Context};
 
-use crate::{EffectResult, Effective, Multiple, Single};
+use crate::{EffectResult, Effective, Multiple, Single, Asynchronous, Produces};
 
 pin_project_lite::pin_project!(
     /// Produced by the [`collect()`](super::EffectiveExt::collect) method
@@ -27,6 +27,10 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> EffectResult<Self::Item, Self::Failure, Self::Produces, Self::Async> {
+        if !<Self::Async as Asynchronous>::IS_ASYNC && !<Self::Produces as Produces>::MULTIPLE {
+            
+        }
+
         let mut this = self.project();
         loop {
             match this.inner.as_mut().poll_effect(cx) {
