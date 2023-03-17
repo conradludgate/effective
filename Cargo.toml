@@ -1,6 +1,6 @@
 [package]
 name = "effective"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 repository = "https://github.com/conradludgate/effective"
 license = "MIT"
@@ -8,5 +8,14 @@ authors = ["Conrad Ludgate <conradludgate@gmail.com>"]
 description = "An effects library, an alternative to keyword generics"
 
 [dependencies]
-futures = "0.3"
+futures-core = "0.3"
+futures-util = "0.3"
 pin-project-lite = "0.2"
+
+futures-executor = { version = "0.3", optional = true }
+tokio = { version = "1", features = ["rt"], optional = true }
+
+[package.metadata.docs.rs]
+all-features = true
+# enable unstable features in the documentation
+rustdoc-args = ["--cfg", "docsrs"]

@@ -1,4 +1,6 @@
-use std::{pin::Pin, task::Context, convert::Infallible};
+//! Effect adaptors that handle effects of effects
+
+use std::{convert::Infallible, pin::Pin, task::Context};
 
 use crate::{
     private::{IsAsyncWith, ProducesMultipleWith},

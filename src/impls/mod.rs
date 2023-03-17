@@ -1,22 +1,29 @@
-use std::convert::Infallible;
+use std::{convert::Infallible, future::Future, pin::pin, task::Context};
+
+use futures_util::task::noop_waker_ref;
 
 use crate::{
     private::{IsAsyncWith, ProducesMultipleWith},
-    wrappers::FromTry,
-    Async, Blocking, Effective, Multiple, Shim, Single, Try,
+    wrappers::{FromFallible, FromFuture, FromIterator},
+    Async, Blocking, EffectResult, Effective, Fallible, Multiple, Shim, Single,
 };
 
-use self::block::Executor;
+use self::blocking::Executor;
 
-pub mod block;
+pub mod blocking;
 pub mod collect;
 pub mod flatten;
 pub mod map;
 pub mod unwrap;
 
-type FromTryFn<T> = fn(T) -> FromTry<T>;
+type FromTryFn<T> = fn(T) -> FromFallible<T>;
+type FromIterFn<T> = fn(T) -> FromIterator<T>;
+type FromFutFn<T> = fn(T) -> FromFuture<T>;
 
+/// Common adaptors to [`Effective`].
 pub trait EffectiveExt: Effective {
+    /// Apply the function over the items, returning a new effective, Flattening the result
+    /// into a single effective.
     fn flat_map<R, F>(self, f: F) -> flatten::Flatten<map::Map<Self, F>>
     where
         Self: Sized,
@@ -29,15 +36,43 @@ pub trait EffectiveExt: Effective {
         self.map(f).flatten()
     }
 
-    fn flatten_try(self) -> flatten::FlattenError<map::Map<Self, FromTryFn<Self::Item>>>
+    /// If the `Item` of this effective is fallible, it pulls that flattens into the effective.
+    ///
+    /// # Note
+    ///
+    /// The effective must be currently infallible. You can use `e.map(fallible).flatten()`
+    /// if you already have a failure case.
+    fn flatten_fallible(self) -> flatten::FlattenError<map::Map<Self, FromTryFn<Self::Item>>>
     where
         Self: Sized,
         Self: Effective<Failure = Infallible>,
-        Self::Item: Try,
-        Self::Produces: ProducesMultipleWith<<FromTry<Self::Item> as Effective>::Produces>,
-        Self::Async: IsAsyncWith<<FromTry<Self::Item> as Effective>::Async>,
+        Self::Item: Fallible,
+        Self::Produces: ProducesMultipleWith<Single>,
+        Self::Async: IsAsyncWith<Blocking>,
     {
-        self.map(crate::wrappers::from_try as _).flatten_error()
+        self.map(crate::wrappers::fallible as _).flatten_error()
+    }
+
+    /// If the `Item` of this effective is a future, it pulls that future into the effective.
+    fn flatten_future(self) -> flatten::FlattenNoError<map::Map<Self, FromFutFn<Self::Item>>>
+    where
+        Self: Sized,
+        Self::Item: Future,
+        Self::Async: IsAsyncWith<Async>,
+        Self::Produces: ProducesMultipleWith<Single>,
+    {
+        self.map(crate::wrappers::future as _).flatten_no_error()
+    }
+
+    /// If the `Item` of this effective is an iterator, it pulls that iterator into the effective.
+    fn flatten_iterator(self) -> flatten::FlattenNoError<map::Map<Self, FromIterFn<Self::Item>>>
+    where
+        Self: Sized,
+        Self::Item: Iterator,
+        Self::Async: IsAsyncWith<Blocking>,
+        Self::Produces: ProducesMultipleWith<Multiple>,
+    {
+        self.map(crate::wrappers::iterator as _).flatten_no_error()
     }
 
     /// Map the items in the effective
@@ -47,8 +82,8 @@ pub trait EffectiveExt: Effective {
     /// ## Try:
     ///
     /// ```
-    /// use effective::{impls::EffectiveExt, TryGet, wrappers};
-    /// let e = wrappers::from_try(Some(42));
+    /// use effective::{impls::EffectiveExt, wrappers};
+    /// let e = wrappers::fallible(Some(42));
     ///
     /// let v: Option<i32> = e.map(|x| x + 1).try_get();
     /// assert_eq!(v, Some(43));
@@ -85,49 +120,14 @@ pub trait EffectiveExt: Effective {
         }
     }
 
-    /// Flatten the items in the effective
-    ///
-    /// # Example
-    ///
-    /// ## Iterators:
-    ///
-    /// ```
-    /// use effective::{impls::EffectiveExt, wrappers};
-    /// let e = wrappers::iterator([1, 2, 3, 4])
-    ///     // map to return a sub iterator
-    ///     .map(|x| wrappers::iterator(std::iter::repeat(x).take(x)));
-    ///
-    /// let v: Vec<usize> = e.flatten().collect().get();
-    /// assert_eq!(v, [1, 2, 2, 3, 3, 3, 4, 4, 4, 4]);
-    /// ```
-    ///
-    /// ## Futures:
-    ///
-    /// ```
-    /// # async fn foo() {
-    /// use effective::{impls::EffectiveExt, wrappers};
-    /// let e = wrappers::future(async { 1 })
-    ///     // map to return a sub future
-    ///     .map(|x| wrappers::future(async move { x + 1 }));
-    ///
-    /// let v: i32 = e.flatten().shim().await;
-    /// assert_eq!(v, 2);
-    /// # }
-    /// ```
-    ///
-    /// ## Combined:
-    ///
-    /// ```
-    /// # async fn foo() {
-    /// use effective::{impls::EffectiveExt, wrappers};
-    /// let e = wrappers::iterator([1, 2, 3, 4])
-    ///     // map to return a sub future
-    ///     .map(|x| wrappers::future(async move { x + 1 }));
-    ///
-    /// let v: Vec<usize> = e.flatten().collect().shim().await;
-    /// assert_eq!(v, [2, 3, 4, 5]);
-    /// # }
-    /// ```
+    /// If this effective item is itself an effective, flatten those items into a single effective.
+    /// 
+    /// # Note:
+    /// The failure of this effective must be convertible to the sub-effective's failure.
+    /// 
+    /// If that's not the case, try:
+    /// * If the sub-effective has no failure, use [`EffectiveExt::flatten_no_error`]
+    /// * If this effective has no failure, use [`EffectiveExt::flatten_error`]
     fn flatten(self) -> flatten::Flatten<Self>
     where
         Self: Sized,
@@ -142,6 +142,13 @@ pub trait EffectiveExt: Effective {
         }
     }
 
+    /// If this effective item is itself an effective, flatten those items into a single effective.
+    /// 
+    /// # Note:
+    /// 
+    /// This effective must be infallible. If that's not the case, try:
+    /// * If the sub-effective has no failure, use [`EffectiveExt::flatten_no_error`]
+    /// * If both can fail, use [`EffectiveExt::flatten`]
     fn flatten_error(self) -> flatten::FlattenError<Self>
     where
         Self: Sized,
@@ -156,6 +163,13 @@ pub trait EffectiveExt: Effective {
         }
     }
 
+    /// If this effective item is itself an effective, flatten those items into a single effective.
+    /// 
+    /// # Note:
+    /// 
+    /// The sub-effective must be infallible. If that's not the case, try:
+    /// * If this effective has no failure, use [`EffectiveExt::flatten_error`]
+    /// * If both can fail, use [`EffectiveExt::flatten`]
     fn flatten_no_error(self) -> flatten::FlattenNoError<Self>
     where
         Self: Sized,
@@ -202,23 +216,22 @@ pub trait EffectiveExt: Effective {
     /// ```
     /// use effective::{impls::EffectiveExt, wrappers};
     ///
-    /// use effective::impls::block::FuturesExecutor;
-    /// let exec = FuturesExecutor::default();
+    /// let runtime = tokio::runtime::Builder::new_current_thread().build().unwrap();
     ///
     /// let e = wrappers::iterator([1, 2, 3, 4])
     ///     .map(|x| async move { x + 1 })
-    ///     .flat_map(wrappers::future);
+    ///     .flatten_future();
     ///
-    /// let v: Vec<i32> = e.block(exec).collect().get();
+    /// let v: Vec<i32> = e.block_on(runtime).collect().get();
     /// assert_eq!(v, [2, 3, 4, 5]);
     /// ```
-    fn block<R>(self, executor: R) -> block::Block<Self, R>
+    fn block_on<R>(self, executor: R) -> blocking::Block<Self, R>
     where
         Self: Sized,
         Self: Effective<Async = Async>,
         R: Executor,
     {
-        block::Block {
+        blocking::Block {
             inner: self,
             executor,
         }
@@ -233,12 +246,12 @@ pub trait EffectiveExt: Effective {
     /// ```
     /// use effective::{impls::EffectiveExt, wrappers};
     ///
-    /// let e = wrappers::iterator([1_i32, 2, 3, 4])
+    /// let e = wrappers::from_fn_once(|| 1_i32)
     ///     .map(|x| x.checked_add(1))
-    ///     .flatten_try();
+    ///     .flatten_fallible();
     ///
-    /// let v: Vec<i32> = e.unwrap().collect().get();
-    /// assert_eq!(v, [2, 3, 4, 5]);
+    /// let v = e.unwrap().get();
+    /// assert_eq!(v, 2);
     /// ```
     fn unwrap(self) -> unwrap::Unwrap<Self>
     where
@@ -248,12 +261,33 @@ pub trait EffectiveExt: Effective {
         unwrap::Unwrap { inner: self }
     }
 
+    /// Extract the value if there are no more effects possible
     fn get(self) -> Self::Item
     where
         Self: Sized,
         Self: Effective<Produces = Single, Failure = Infallible, Async = Blocking>,
     {
-        crate::Get::get(self)
+        match pin!(self).poll_effect(&mut Context::from_waker(noop_waker_ref())) {
+            EffectResult::Item(x) => x,
+            EffectResult::Failure(_) => unreachable!(),
+            EffectResult::Done(_) => unreachable!(),
+            EffectResult::Pending(_) => unimplemented!(),
+        }
+    }
+
+    /// Extract the value or failure
+    fn try_get<R>(self) -> R
+    where
+        Self: Sized,
+        Self: Effective<Produces = Single, Async = Blocking>,
+        R: Fallible<Continue = Self::Item, Break = Self::Failure>,
+    {
+        match pin!(self).poll_effect(&mut Context::from_waker(noop_waker_ref())) {
+            EffectResult::Item(x) => R::from_continue(x),
+            EffectResult::Failure(x) => R::from_break(x),
+            EffectResult::Done(_) => unreachable!(),
+            EffectResult::Pending(_) => unimplemented!(),
+        }
     }
 
     fn shim(self) -> Shim<Self>

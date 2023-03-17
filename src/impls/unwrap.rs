@@ -1,4 +1,6 @@
-use std::{pin::Pin, task::Context, convert::Infallible};
+//! Effect adaptors to subtract the 'fallible' effect
+
+use std::{convert::Infallible, pin::Pin, task::Context};
 
 use crate::{EffectResult, Effective};
 

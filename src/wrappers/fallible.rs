@@ -1,18 +1,19 @@
 use std::{pin::Pin, task::Context};
 
-use crate::{Blocking, EffectResult, Effective, Single, Try};
+use crate::{Blocking, EffectResult, Effective, Fallible, Single};
 
-pub fn from_try<T>(t: T) -> FromTry<T> {
-    FromTry { inner: Some(t) }
+/// Create an [`Effective`] that has a failure, a single value and no async
+pub fn fallible<T>(t: T) -> FromFallible<T> {
+    FromFallible { inner: Some(t) }
 }
 
 pin_project_lite::pin_project!(
-    pub struct FromTry<T> {
+    pub struct FromFallible<T> {
         pub inner: Option<T>,
     }
 );
 
-impl<T: Try> Effective for FromTry<T> {
+impl<T: Fallible> Effective for FromFallible<T> {
     type Item = T::Continue;
     type Failure = T::Break;
     type Produces = Single;

@@ -1,26 +1,16 @@
+//! Effect adaptors to subtract the 'async' effect.
+
 use std::{
     future::poll_fn,
+    future::Future,
     pin::Pin,
     task::{Context, Poll},
 };
 
-use futures::{executor::LocalPool, Future};
-
-use crate::{EffectResult, Effective, Async, Blocking};
-
-#[derive(Default)]
-pub struct FuturesExecutor {
-    pool: LocalPool,
-}
+use crate::{Async, Blocking, EffectResult, Effective};
 
 pub trait Executor {
     fn block_on<R>(&mut self, f: impl Future<Output = R>) -> R;
-}
-
-impl Executor for FuturesExecutor {
-    fn block_on<R>(&mut self, f: impl Future<Output = R>) -> R {
-        self.pool.run_until(f)
-    }
 }
 
 pin_project_lite::pin_project!(
@@ -54,5 +44,21 @@ where
                 EffectResult::Done(x) => Poll::Ready(EffectResult::Done(x)),
                 EffectResult::Pending(Async) => Poll::Pending,
             }))
+    }
+}
+
+#[cfg(feature = "futures-executor")]
+#[cfg_attr(docsrs, doc(cfg(feature = "futures-executor")))]
+impl Executor for futures_executor::LocalPool {
+    fn block_on<R>(&mut self, f: impl Future<Output = R>) -> R {
+        self.run_until(f)
+    }
+}
+
+#[cfg(feature = "tokio")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
+impl Executor for tokio::runtime::Runtime {
+    fn block_on<R>(&mut self, f: impl Future<Output = R>) -> R {
+        tokio::runtime::Runtime::block_on(self, f)
     }
 }

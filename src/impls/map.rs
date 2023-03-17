@@ -1,3 +1,5 @@
+//! Effect adaptors that convert an effect of one type into an effect of another
+
 use std::{pin::Pin, task::Context};
 
 use crate::{EffectResult, Effective};

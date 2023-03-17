@@ -1,18 +1,21 @@
-use std::{pin::Pin, task::Context, convert::Infallible};
+use std::{convert::Infallible, pin::Pin, task::Context};
 
-use crate::{EffectResult, Effective, Multiple, Blocking};
+use crate::{Blocking, EffectResult, Effective, Multiple};
 
-pub fn iterator<I: IntoIterator>(iterator: I) -> IteratorShim<I::IntoIter> {
-    IteratorShim { inner: iterator.into_iter() }
+/// Create an [`Effective`] that has no failures, multiple values and no async
+pub fn iterator<I: IntoIterator>(iterator: I) -> FromIterator<I::IntoIter> {
+    FromIterator {
+        inner: iterator.into_iter(),
+    }
 }
 
 pin_project_lite::pin_project!(
-    pub struct IteratorShim<I> {
+    pub struct FromIterator<I> {
         pub inner: I,
     }
 );
 
-impl<I: Iterator> Effective for IteratorShim<I> {
+impl<I: Iterator> Effective for FromIterator<I> {
     type Item = I::Item;
     type Failure = Infallible;
     type Produces = Multiple;

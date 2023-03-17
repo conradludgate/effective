@@ -1,3 +1,5 @@
+//! Effect adaptors to subtract the 'iterable' effect
+
 use std::{pin::Pin, task::Context};
 
 use crate::{EffectResult, Effective, Multiple, Single};
@@ -30,7 +32,9 @@ where
             match this.inner.as_mut().poll_effect(cx) {
                 EffectResult::Item(x) => this.into.extend(Some(x)),
                 EffectResult::Failure(x) => return EffectResult::Failure(x),
-                EffectResult::Done(Multiple) => return EffectResult::Item(std::mem::take(this.into)),
+                EffectResult::Done(Multiple) => {
+                    return EffectResult::Item(std::mem::take(this.into))
+                }
                 EffectResult::Pending(x) => return EffectResult::Pending(x),
             }
         }

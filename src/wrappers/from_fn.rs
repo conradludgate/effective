@@ -1,11 +1,13 @@
-use std::{pin::Pin, task::Context, convert::Infallible};
+use std::{convert::Infallible, pin::Pin, task::Context};
 
-use crate::{EffectResult, Effective, Multiple, Blocking, Single};
+use crate::{Asynchronous, Blocking, EffectResult, Effective, Single};
 
+/// Create a raw `Effective` from a function
 pub fn from_fn<F>(f: F) -> FromFn<F> {
     FromFn { inner: f }
 }
 
+/// Create an `Effective` that returns a single value, no failures and no async
 pub fn from_fn_once<F>(f: F) -> FromFnOnce<F> {
     FromFnOnce { inner: Some(f) }
 }
@@ -16,17 +18,22 @@ pin_project_lite::pin_project!(
     }
 );
 
-impl<F, R> Effective for FromFn<F>
+impl<F, Item, Failure, Produces, Async> Effective for FromFn<F>
 where
-    F: FnMut() -> R,
+    F: FnMut(&mut Context<'_>) -> EffectResult<Item, Failure, Produces, Async>,
+    Produces: crate::Produces,
+    Async: Asynchronous,
 {
-    type Item = R;
-    type Failure = Infallible;
-    type Produces = Multiple;
-    type Async = Blocking;
+    type Item = Item;
+    type Failure = Failure;
+    type Produces = Produces;
+    type Async = Async;
 
-    fn poll_effect(self: Pin<&mut Self>, _: &mut Context<'_>) -> EffectResult<R, Infallible, Multiple, Blocking> {
-        EffectResult::Item((self.project().inner)())
+    fn poll_effect(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> EffectResult<Item, Failure, Produces, Async> {
+        (self.project().inner)(cx)
     }
 }
 
@@ -45,7 +52,10 @@ where
     type Produces = Single;
     type Async = Blocking;
 
-    fn poll_effect(self: Pin<&mut Self>, _: &mut Context<'_>) -> EffectResult<R, Infallible, Single, Blocking> {
+    fn poll_effect(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+    ) -> EffectResult<R, Infallible, Single, Blocking> {
         let x = self
             .project()
             .inner

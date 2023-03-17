@@ -1,28 +1,28 @@
 use std::{
     convert::Infallible,
+    future::Future,
     future::IntoFuture,
     pin::Pin,
     task::{Context, Poll},
 };
 
-use futures::Future;
-
 use crate::{Async, EffectResult, Effective, Single};
 
-pub fn future<F: IntoFuture>(future: F) -> FutureShim<F::IntoFuture> {
-    FutureShim {
+/// Create an [`Effective`] that has no failures, a single value and is async
+pub fn future<F: IntoFuture>(future: F) -> FromFuture<F::IntoFuture> {
+    FromFuture {
         inner: future.into_future(),
     }
 }
 
 pin_project_lite::pin_project!(
-    pub struct FutureShim<F> {
+    pub struct FromFuture<F> {
         #[pin]
         pub inner: F,
     }
 );
 
-impl<F: Future> Effective for FutureShim<F> {
+impl<F: Future> Effective for FromFuture<F> {
     type Item = F::Output;
     type Failure = Infallible;
     type Produces = Single;
