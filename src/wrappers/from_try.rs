@@ -1,6 +1,6 @@
-use std::{ops::Try, pin::Pin, task::Context};
+use std::{pin::Pin, task::Context};
 
-use crate::{EffectResult, Effective};
+use crate::{Blocking, EffectResult, Effective, Single, Try};
 
 pub fn from_try<T>(t: T) -> FromTry<T> {
     FromTry { inner: Some(t) }
@@ -13,15 +13,15 @@ pin_project_lite::pin_project!(
 );
 
 impl<T: Try> Effective for FromTry<T> {
-    type Output = T::Output;
-    type Residual = T::Residual;
-    type Yields = !;
-    type Awaits = !;
+    type Item = T::Continue;
+    type Failure = T::Break;
+    type Produces = Single;
+    type Async = Blocking;
 
     fn poll_effect(
         self: Pin<&mut Self>,
         _: &mut Context<'_>,
-    ) -> EffectResult<T::Output, T::Residual, Self::Yields, Self::Awaits> {
+    ) -> EffectResult<T::Continue, T::Break, Single, Blocking> {
         let this = self.project();
         let x = this.inner.take().expect("polled after completion");
         match x.branch() {

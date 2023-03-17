@@ -1,6 +1,6 @@
 use std::{pin::Pin, task::Context};
 
-use crate::{EffectResult, Effective};
+use crate::{EffectResult, Effective, Multiple, Single};
 
 pin_project_lite::pin_project!(
     /// Produced by the [`collect()`](super::EffectiveExt::collect) method
@@ -13,24 +13,24 @@ pin_project_lite::pin_project!(
 
 impl<E, C> Effective for Collect<E, C>
 where
-    E: Effective<Yields = ()>,
-    C: Default + Extend<E::Output>,
+    E: Effective<Produces = Multiple>,
+    C: Default + Extend<E::Item>,
 {
-    type Output = C;
-    type Residual = E::Residual;
-    type Yields = !;
-    type Awaits = E::Awaits;
+    type Item = C;
+    type Failure = E::Failure;
+    type Produces = Single;
+    type Async = E::Async;
 
     fn poll_effect(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> EffectResult<Self::Output, Self::Residual, Self::Yields, Self::Awaits> {
+    ) -> EffectResult<Self::Item, Self::Failure, Self::Produces, Self::Async> {
         let mut this = self.project();
         loop {
             match this.inner.as_mut().poll_effect(cx) {
                 EffectResult::Item(x) => this.into.extend(Some(x)),
                 EffectResult::Failure(x) => return EffectResult::Failure(x),
-                EffectResult::Done(()) => return EffectResult::Item(std::mem::take(this.into)),
+                EffectResult::Done(Multiple) => return EffectResult::Item(std::mem::take(this.into)),
                 EffectResult::Pending(x) => return EffectResult::Pending(x),
             }
         }

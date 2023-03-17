@@ -1,14 +1,18 @@
 use std::{
+    convert::Infallible,
+    future::IntoFuture,
     pin::Pin,
     task::{Context, Poll},
 };
 
 use futures::Future;
 
-use crate::{EffectResult, Effective};
+use crate::{Async, EffectResult, Effective, Single};
 
-pub fn future<F>(future: F) -> FutureShim<F> {
-    FutureShim { inner: future }
+pub fn future<F: IntoFuture>(future: F) -> FutureShim<F::IntoFuture> {
+    FutureShim {
+        inner: future.into_future(),
+    }
 }
 
 pin_project_lite::pin_project!(
@@ -19,18 +23,18 @@ pin_project_lite::pin_project!(
 );
 
 impl<F: Future> Effective for FutureShim<F> {
-    type Output = F::Output;
-    type Residual = !;
-    type Yields = !;
-    type Awaits = ();
+    type Item = F::Output;
+    type Failure = Infallible;
+    type Produces = Single;
+    type Async = Async;
 
     fn poll_effect(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> EffectResult<Self::Output, Self::Residual, Self::Yields, Self::Awaits> {
+    ) -> EffectResult<Self::Item, Self::Failure, Self::Produces, Self::Async> {
         match self.project().inner.poll(cx) {
             Poll::Ready(x) => EffectResult::Item(x),
-            Poll::Pending => EffectResult::Pending(()),
+            Poll::Pending => EffectResult::Pending(Async),
         }
     }
 }

@@ -1,9 +1,9 @@
-use std::{pin::Pin, task::Context};
+use std::{pin::Pin, task::Context, convert::Infallible};
 
-use crate::{EffectResult, Effective};
+use crate::{EffectResult, Effective, Multiple, Blocking};
 
-pub fn iterator<I>(iterator: I) -> IteratorShim<I> {
-    IteratorShim { inner: iterator }
+pub fn iterator<I: IntoIterator>(iterator: I) -> IteratorShim<I::IntoIter> {
+    IteratorShim { inner: iterator.into_iter() }
 }
 
 pin_project_lite::pin_project!(
@@ -13,18 +13,18 @@ pin_project_lite::pin_project!(
 );
 
 impl<I: Iterator> Effective for IteratorShim<I> {
-    type Output = I::Item;
-    type Residual = !;
-    type Yields = ();
-    type Awaits = !;
+    type Item = I::Item;
+    type Failure = Infallible;
+    type Produces = Multiple;
+    type Async = Blocking;
 
     fn poll_effect(
         self: Pin<&mut Self>,
         _: &mut Context<'_>,
-    ) -> EffectResult<Self::Output, Self::Residual, Self::Yields, Self::Awaits> {
+    ) -> EffectResult<Self::Item, Self::Failure, Self::Produces, Self::Async> {
         match self.project().inner.next() {
             Some(x) => EffectResult::Item(x),
-            None => EffectResult::Done(()),
+            None => EffectResult::Done(Multiple),
         }
     }
 }

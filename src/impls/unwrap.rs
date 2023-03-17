@@ -1,4 +1,4 @@
-use std::{pin::Pin, task::Context};
+use std::{pin::Pin, task::Context, convert::Infallible};
 
 use crate::{EffectResult, Effective};
 
@@ -13,17 +13,17 @@ pin_project_lite::pin_project!(
 impl<E> Effective for Unwrap<E>
 where
     E: Effective,
-    E::Residual: std::fmt::Debug,
+    E::Failure: std::fmt::Debug,
 {
-    type Output = E::Output;
-    type Residual = !;
-    type Yields = E::Yields;
-    type Awaits = E::Awaits;
+    type Item = E::Item;
+    type Failure = Infallible;
+    type Produces = E::Produces;
+    type Async = E::Async;
 
     fn poll_effect(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> EffectResult<Self::Output, Self::Residual, Self::Yields, Self::Awaits> {
+    ) -> EffectResult<Self::Item, Self::Failure, Self::Produces, Self::Async> {
         let mut this = self.project();
         match this.inner.as_mut().poll_effect(cx) {
             EffectResult::Item(x) => EffectResult::Item(x),

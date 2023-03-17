@@ -2,8 +2,10 @@
 name = "effective"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+repository = "https://github.com/conradludgate/effective"
+license = "MIT"
+authors = ["Conrad Ludgate <conradludgate@gmail.com>"]
+description = "An effects library, an alternative to keyword generics"
 
 [dependencies]
 futures = "0.3"

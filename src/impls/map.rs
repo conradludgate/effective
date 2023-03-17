@@ -14,17 +14,17 @@ pin_project_lite::pin_project!(
 impl<R, E, F> Effective for Map<E, F>
 where
     E: Effective,
-    F: FnMut(E::Output) -> R,
+    F: FnMut(E::Item) -> R,
 {
-    type Output = R;
-    type Residual = E::Residual;
-    type Yields = E::Yields;
-    type Awaits = E::Awaits;
+    type Item = R;
+    type Failure = E::Failure;
+    type Produces = E::Produces;
+    type Async = E::Async;
 
     fn poll_effect(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> EffectResult<Self::Output, Self::Residual, Self::Yields, Self::Awaits> {
+    ) -> EffectResult<Self::Item, Self::Failure, Self::Produces, Self::Async> {
         let this = self.project();
         match this.inner.poll_effect(cx) {
             EffectResult::Item(x) => EffectResult::Item((this.map)(x)),

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["block","collect","flatten","map","unwrap"],"trait":["EffectiveExt"]};

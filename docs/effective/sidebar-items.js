@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["EffectResult"],"mod":["impls","wrappers"],"struct":["Shim"],"trait":["Effective","Exists","Get","TryAsyncIterator","TryFuture","TryGet","TryIterator"]};

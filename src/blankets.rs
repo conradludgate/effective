@@ -1,14 +1,17 @@
 use std::{
-    async_iter::AsyncIterator,
+    convert::Infallible,
     future::Future,
-    ops::{ControlFlow, FromResidual, Try},
+    ops::ControlFlow,
     pin::{pin, Pin},
     task::{Context, Poll},
 };
 
 use futures::{task::noop_waker_ref, Stream};
 
-use crate::{EffectResult, Effective, Get, TryAsyncIterator, TryFuture, TryGet, TryIterator};
+use crate::{
+    Async, Blocking, EffectResult, Effective, Get, Multiple, Single, Try, TryAsyncIterator,
+    TryFuture, TryGet, TryIterator,
+};
 
 pin_project_lite::pin_project!(
     /// Used for demonstrating how effective [`Effective`] is.
@@ -20,31 +23,31 @@ pin_project_lite::pin_project!(
 
 impl<E> Iterator for Shim<E>
 where
-    E: Effective<Yields = (), Awaits = !, Residual = !> + Unpin,
+    E: Effective<Produces = Multiple, Async = Blocking, Failure = Infallible> + Unpin,
 {
-    type Item = E::Output;
+    type Item = E::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
         match Pin::new(&mut self.inner).poll_effect(&mut Context::from_waker(noop_waker_ref())) {
             EffectResult::Item(x) => Some(x),
             EffectResult::Failure(_) => unreachable!(),
-            EffectResult::Done(()) => None,
+            EffectResult::Done(Multiple) => None,
             EffectResult::Pending(_) => unreachable!(),
         }
     }
 }
 impl<E> TryIterator for Shim<E>
 where
-    E: Effective<Yields = (), Awaits = !> + Unpin,
+    E: Effective<Produces = Multiple, Async = Blocking> + Unpin,
 {
-    type Output = E::Output;
-    type Residual = E::Residual;
+    type Output = E::Item;
+    type Residual = E::Failure;
 
     fn try_next(&mut self) -> Option<ControlFlow<Self::Residual, Self::Output>> {
         match Pin::new(&mut self.inner).poll_effect(&mut Context::from_waker(noop_waker_ref())) {
             EffectResult::Item(x) => Some(ControlFlow::Continue(x)),
             EffectResult::Failure(x) => Some(ControlFlow::Break(x)),
-            EffectResult::Done(()) => None,
+            EffectResult::Done(Multiple) => None,
             EffectResult::Pending(_) => unreachable!(),
         }
     }
@@ -52,26 +55,26 @@ where
 
 impl<E> Future for Shim<E>
 where
-    E: Effective<Residual = !, Yields = !, Awaits = ()>,
+    E: Effective<Failure = Infallible, Produces = Single, Async = Async>,
 {
-    type Output = E::Output;
+    type Output = E::Item;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.project().inner.poll_effect(cx) {
             EffectResult::Item(x) => Poll::Ready(x),
             EffectResult::Failure(_) => unreachable!(),
             EffectResult::Done(_) => unreachable!(),
-            EffectResult::Pending(()) => Poll::Pending,
+            EffectResult::Pending(Async) => Poll::Pending,
         }
     }
 }
 
 impl<E> TryFuture for E
 where
-    E: Effective<Yields = !, Awaits = ()>,
+    E: Effective<Produces = Single, Async = Async>,
 {
-    type Output = E::Output;
-    type Residual = E::Residual;
+    type Output = E::Item;
+    type Residual = E::Failure;
 
     fn try_poll(
         self: Pin<&mut Self>,
@@ -81,49 +84,33 @@ where
             EffectResult::Item(x) => Poll::Ready(ControlFlow::Continue(x)),
             EffectResult::Failure(x) => Poll::Ready(ControlFlow::Break(x)),
             EffectResult::Done(_) => unreachable!(),
-            EffectResult::Pending(()) => Poll::Pending,
-        }
-    }
-}
-
-impl<E> AsyncIterator for Shim<E>
-where
-    E: Effective<Yields = (), Awaits = (), Residual = !>,
-{
-    type Item = E::Output;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        match self.project().inner.poll_effect(cx) {
-            EffectResult::Item(x) => Poll::Ready(Some(x)),
-            EffectResult::Failure(_) => unreachable!(),
-            EffectResult::Done(()) => Poll::Ready(None),
-            EffectResult::Pending(()) => Poll::Pending,
+            EffectResult::Pending(Async) => Poll::Pending,
         }
     }
 }
 
 impl<E> Stream for Shim<E>
 where
-    E: Effective<Yields = (), Awaits = (), Residual = !>,
+    E: Effective<Produces = Multiple, Async = Async, Failure = Infallible>,
 {
-    type Item = E::Output;
+    type Item = E::Item;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match self.project().inner.poll_effect(cx) {
             EffectResult::Item(x) => Poll::Ready(Some(x)),
             EffectResult::Failure(_) => unreachable!(),
-            EffectResult::Done(()) => Poll::Ready(None),
-            EffectResult::Pending(()) => Poll::Pending,
+            EffectResult::Done(Multiple) => Poll::Ready(None),
+            EffectResult::Pending(Async) => Poll::Pending,
         }
     }
 }
 
 impl<E> TryAsyncIterator for E
 where
-    E: Effective<Yields = (), Awaits = ()>,
+    E: Effective<Produces = Multiple, Async = Async>,
 {
-    type Output = E::Output;
-    type Residual = E::Residual;
+    type Output = E::Item;
+    type Residual = E::Failure;
 
     fn try_poll_next(
         self: Pin<&mut Self>,
@@ -132,17 +119,17 @@ where
         match self.poll_effect(cx) {
             EffectResult::Item(x) => Poll::Ready(Some(ControlFlow::Continue(x))),
             EffectResult::Failure(x) => Poll::Ready(Some(ControlFlow::Break(x))),
-            EffectResult::Done(()) => Poll::Ready(None),
-            EffectResult::Pending(()) => Poll::Pending,
+            EffectResult::Done(Multiple) => Poll::Ready(None),
+            EffectResult::Pending(Async) => Poll::Pending,
         }
     }
 }
 
 impl<E> Get for E
 where
-    E: Effective<Yields = !, Awaits = !, Residual = !>,
+    E: Effective<Produces = Single, Async = Blocking, Failure = Infallible>,
 {
-    type Output = E::Output;
+    type Output = E::Item;
 
     fn get(self) -> Self::Output {
         match pin!(self).poll_effect(&mut Context::from_waker(noop_waker_ref())) {
@@ -156,18 +143,18 @@ where
 
 impl<E> TryGet for E
 where
-    E: Effective<Yields = !, Awaits = !>,
+    E: Effective<Produces = Single, Async = Blocking>,
 {
-    type Output = E::Output;
-    type Residual = E::Residual;
+    type Continue = E::Item;
+    type Break = E::Failure;
 
     fn try_get<R>(self) -> R
     where
-        R: FromResidual<Self::Residual> + Try<Output = Self::Output>,
+        R: Try<Break = Self::Break, Continue = Self::Continue>,
     {
         match pin!(self).poll_effect(&mut Context::from_waker(noop_waker_ref())) {
-            EffectResult::Item(x) => R::from_output(x),
-            EffectResult::Failure(x) => R::from_residual(x),
+            EffectResult::Item(x) => R::from_continue(x),
+            EffectResult::Failure(x) => R::from_break(x),
             EffectResult::Done(_) => unreachable!(),
             EffectResult::Pending(_) => unimplemented!(),
         }

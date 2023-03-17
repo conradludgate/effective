@@ -6,7 +6,7 @@ use std::{
 
 use futures::{executor::LocalPool, Future};
 
-use crate::{EffectResult, Effective};
+use crate::{EffectResult, Effective, Async, Blocking};
 
 #[derive(Default)]
 pub struct FuturesExecutor {
@@ -34,25 +34,25 @@ pin_project_lite::pin_project!(
 
 impl<E, R> Effective for Block<E, R>
 where
-    E: Effective<Awaits = ()>,
+    E: Effective<Async = Async>,
     R: Executor,
 {
-    type Output = E::Output;
-    type Residual = E::Residual;
-    type Yields = E::Yields;
-    type Awaits = !;
+    type Item = E::Item;
+    type Failure = E::Failure;
+    type Produces = E::Produces;
+    type Async = Blocking;
 
     fn poll_effect(
         self: Pin<&mut Self>,
         _: &mut Context<'_>,
-    ) -> EffectResult<Self::Output, Self::Residual, Self::Yields, Self::Awaits> {
+    ) -> EffectResult<Self::Item, Self::Failure, Self::Produces, Self::Async> {
         let mut this = self.project();
         this.executor
             .block_on(poll_fn(|cx| match this.inner.as_mut().poll_effect(cx) {
                 EffectResult::Item(x) => Poll::Ready(EffectResult::Item(x)),
                 EffectResult::Failure(x) => Poll::Ready(EffectResult::Failure(x)),
                 EffectResult::Done(x) => Poll::Ready(EffectResult::Done(x)),
-                EffectResult::Pending(()) => Poll::Pending,
+                EffectResult::Pending(Async) => Poll::Pending,
             }))
     }
 }
