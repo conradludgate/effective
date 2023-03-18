@@ -14,7 +14,7 @@ pin_project_lite::pin_project!(
         E: Effective,
     {
         #[pin]
-        pub(super) inner: E,
+        pub(super) inner: Option<E>,
         #[pin]
         pub(super) flatten: Option<E::Item>,
     }
@@ -62,12 +62,44 @@ where
                 }
             }
 
-            match this.inner.as_mut().poll_effect(cx) {
-                EffectResult::Item(x) => this.flatten.set(Some(x)),
-                EffectResult::Failure(x) => return EffectResult::Failure(x.into_fail()),
-                EffectResult::Done(x) => return EffectResult::Done(x.into_many()),
-                EffectResult::Pending(x) => return EffectResult::Pending(x.into_async()),
+            if let Some(inner) = this.inner.as_mut().as_pin_mut() {
+                match inner.poll_effect(cx) {
+                    EffectResult::Item(x) => {
+                        if !<E::Produces as Produces>::MULTIPLE {
+                            this.inner.set(None);
+                        }
+                        this.flatten.set(Some(x))
+                    }
+                    EffectResult::Failure(x) => return EffectResult::Failure(x.into_fail()),
+                    EffectResult::Done(_) => this.inner.set(None),
+                    EffectResult::Pending(x) => return EffectResult::Pending(x.into_async()),
+                }
+            } else {
+                use crate::SealedMarker;
+                return EffectResult::Done(<<E::Produces as ProducesMultipleWith<
+                    <E::Item as Effective>::Produces,
+                >>::Produces as SealedMarker>::new());
             }
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        if <E::Produces as Produces>::MULTIPLE
+            && <<E::Item as Effective>::Produces as Produces>::MULTIPLE
+        {
+            (0, None)
+        } else if <E::Produces as Produces>::MULTIPLE {
+            if let Some(inner) = self.inner.as_ref() {
+                inner.size_hint()
+            } else {
+                (0, Some(0))
+            }
+        } else if let Some(flatten) = self.flatten.as_ref() {
+            flatten.size_hint()
+        } else if self.inner.is_some() {
+            (0, None)
+        } else {
+            (0, Some(0))
         }
     }
 }

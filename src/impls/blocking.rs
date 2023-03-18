@@ -45,6 +45,10 @@ where
                 EffectResult::Pending(Async) => Poll::Pending,
             }))
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
 }
 
 #[cfg(feature = "futures-executor")]

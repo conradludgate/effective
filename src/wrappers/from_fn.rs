@@ -1,6 +1,6 @@
 use std::{convert::Infallible, pin::Pin, task::Context};
 
-use crate::{Asynchronous, Blocking, EffectResult, Effective, Single, Fails};
+use crate::{Asynchronous, Blocking, EffectResult, Effective, Fails, Single};
 
 /// Create a raw `Effective` from a function
 pub fn from_fn<F>(f: F) -> FromFn<F> {

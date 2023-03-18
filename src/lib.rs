@@ -188,23 +188,25 @@
 //! // no more effects, just a single value to get
 //! let e: Vec<_> = e.get();
 //! ```
-//! 
+//!
 //! # North Star
-//! 
-//! Obviously this library is quite complex to reason about. I think it is a good pairing to 
+//!
+//! Obviously this library is quite complex to reason about. I think it is a good pairing to
 //! keyword-generics.
-//! 
+//!
 //! There should be a syntax to implement these concepts but I think the underlying trait is a good
 //! abstraction.
-//! 
+//!
 //! Similar to how:
 //! * `async{}.await` models a [`Future`](std::future::Future),
 //! * `try{}?` models a [`Try`](std::ops::Try),
 //! * `for/yield` models an [`Iterator`]
-//! 
+//!
 //! These syntax elements could be composed to make application level [`Effective`] implementations.
-//! 
+//!
 //! ```ignore
+//! async try get_page(after: Option<usize>) -> Result<Option<Page>, Error> { todo!() }
+//!
 //! // `async` works as normal, allows the `.await` syntax
 //! // `gen` allows the `yield` syntax, return means `Done`
 //! // `try` allows the `?` syntax.
@@ -213,21 +215,49 @@
 //!         // no first page, exit
 //!         return;
 //!     };
-//! 
+//!
 //!     loop {
 //!         let next_page = page.next_page;
-//! 
+//!
 //!         // output the page (auto 'ok-wrapping')
 //!         yield page;
-//! 
+//!
 //!         let Some(p) = get_page(Some(next_page)).await? else {
 //!             // no next page, exit
 //!             return;
 //!         };
-//! 
+//!
 //!         page = p;
 //!     }
 //! }
+//!
+//! // This method is still `async` and `try`, but it removes the 'gen` keyword
+//! // because internally we handle all the iterable effects.
+//! async try fn save_pages() -> Result<(), Error> {
+//!     // The for loop is designed to handle iterable effects only.
+//!     // `try` and `await` here tell it to expect and propagate the
+//!     // fallible and async effects.
+//!     for try await page in get_pages() {
+//!         page.save_to_disk()?
+//!     }
+//! }
+//! ```
+//!
+//! With adaptors, it would look like
+//!
+//! ```ignore
+//! let get_pages = wrappers::unfold(None, |next_page| {
+//!     wrappers::future(get_page(next_page)).flatten_fallible().map(|page| {
+//!         page.map(|| {
+//!             let next_page = page.next_page;
+//!             (page, Some(next_page))
+//!         })
+//!     })
+//! });
+//!
+//! let save_pages = get_pages.for_each(|page| {
+//!     wrappers::future(page.save_to_disk()).flatten_fallible()
+//! });
 //! ```
 
 use std::{convert::Infallible, ops::ControlFlow, pin::Pin, task::Context};
@@ -449,12 +479,13 @@ pub trait Effective {
     /// because otherwise it would be a violation of the trait's protocol.
     ///
     /// The default implementation returns `(0, `[`None`]`)` which is correct for any
-    /// effective.
-    fn size_hint(&self) -> (usize, Option<usize>)
-    where
-        Self: Effective<Produces = Multiple>,
-    {
-        (0, None)
+    /// effective, or `(1, Some(1))` if `Produces = Single`.
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        if <Self::Produces as Produces>::MULTIPLE {
+            (0, None)
+        } else {
+            (1, Some(1))
+        }
     }
 }
 

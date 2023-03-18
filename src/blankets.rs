@@ -8,7 +8,7 @@ use std::{
 use futures_core::Stream;
 use futures_util::task::noop_waker_ref;
 
-use crate::{Async, Blocking, EffectResult, Effective, Multiple, Single, Failure};
+use crate::{Async, Blocking, EffectResult, Effective, Failure, Multiple, Single};
 
 pin_project_lite::pin_project!(
     /// `Shim` implements some of the well known third-party traits from [`Effective`].

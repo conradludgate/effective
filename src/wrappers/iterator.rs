@@ -30,4 +30,11 @@ impl<I: Iterator> Effective for FromIterator<I> {
             None => EffectResult::Done(Multiple),
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>)
+    where
+        Self: Effective<Produces = Multiple>,
+    {
+        self.inner.size_hint()
+    }
 }

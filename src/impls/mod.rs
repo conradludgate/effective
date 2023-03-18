@@ -16,6 +16,8 @@ use self::blocking::Executor;
 pub mod blocking;
 pub mod collect;
 pub mod flatten;
+pub mod fold;
+pub mod for_each;
 pub mod map;
 pub mod unwrap;
 
@@ -135,7 +137,7 @@ pub trait EffectiveExt: Effective {
         Self::Failure: HasFailureWith<<Self::Item as Effective>::Failure>,
     {
         flatten::Flatten {
-            inner: self,
+            inner: Some(self),
             flatten: None,
         }
     }
@@ -261,6 +263,59 @@ pub trait EffectiveExt: Effective {
         Self: Sized,
     {
         TryShim { inner: self }
+    }
+
+    /// High level fold function. Takes all the items in the effective and applies the `func` to it,
+    /// with a running accumulator. Returns the final accumulator value.
+    ///
+    /// `F` must return a new effective, this must only have a single value but can be async or fallible.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use effective::{impls::EffectiveExt, wrappers};
+    ///
+    /// let runtime = tokio::runtime::Builder::new_current_thread().build().unwrap();
+    ///
+    /// // async for maximum efficiency 😎
+    /// async fn multiply(a: i32, b: i32) -> Option<i32> {
+    ///     a.checked_mul(b)
+    /// }
+    ///
+    /// let e = wrappers::iterator([2, 3, 4, 5]);
+    ///
+    /// let v: Option<i32> = e.fold(1, |acc, item| {
+    ///     wrappers::future(multiply(acc, item)).flatten_fallible()
+    /// }).block_on(runtime).try_get();
+    ///
+    /// assert_eq!(v, Some(120));
+    /// ```
+    fn fold<F, B, C>(self, init: B, func: F) -> fold::Fold<Self, F, B, C>
+    where
+        Self: Sized,
+        Self: Effective<Produces = Multiple>,
+        F: FnMut(B, Self::Item) -> C,
+        C: Effective<Item = B, Produces = Single>,
+    {
+        fold::Fold {
+            inner: self,
+            func,
+            state: fold::State::Acc { item: Some(init) },
+        }
+    }
+
+    fn for_each<F, C>(self, func: F) -> for_each::ForEach<Self, F, C>
+    where
+        Self: Sized,
+        Self: Effective<Produces = Multiple>,
+        F: FnMut(Self::Item) -> C,
+        C: Effective<Item = ()>,
+    {
+        for_each::ForEach {
+            inner: self,
+            func,
+            state: for_each::State::Acc,
+        }
     }
 }
 
