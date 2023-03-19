@@ -3,7 +3,7 @@
 use std::{pin::Pin, task::Context};
 
 use crate::{
-    utils::{HasFailureWith, IsAsyncWith},
+    utils::{from_async, from_fail, AsyncPair, AsyncWith, FalliblePair, FallibleWith},
     EffectResult, Effective, Multiple, Single,
 };
 
@@ -36,18 +36,15 @@ where
     E: Effective<Produces = Multiple>,
     F: FnMut(B, E::Item) -> C,
     C: Effective<Item = B, Produces = Single>,
-    E::Async: IsAsyncWith<C::Async>,
-    E::Failure: HasFailureWith<C::Failure>,
+    E::Async: AsyncWith<C::Async>,
+    E::Failure: FallibleWith<C::Failure>,
 {
     type Item = B;
-    type Failure = <E::Failure as HasFailureWith<C::Failure>>::Failure;
+    type Failure = FalliblePair<E, C>;
     type Produces = Single;
-    type Async = <E::Async as IsAsyncWith<C::Async>>::IsAsync;
+    type Async = AsyncPair<E, C>;
 
-    fn poll_effect(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> EffectResult<Self::Item, Self::Failure, Self::Produces, Self::Async> {
+    fn poll_effect(self: Pin<&mut Self>, cx: &mut Context<'_>) -> crate::EffectiveResult<Self> {
         let mut this = self.project();
         loop {
             match this.state.as_mut().project() {
@@ -65,15 +62,9 @@ where
                 StateProj::Eff { eff } => match eff.poll_effect(cx) {
                     EffectResult::Item(item) => this.state.set(State::Acc { item: Some(item) }),
                     EffectResult::Done(_) => unreachable!(),
-                    EffectResult::Failure(x) => {
-                        return EffectResult::Failure(
-                            <E::Failure as HasFailureWith<C::Failure>>::from_fail(x),
-                        )
-                    }
+                    EffectResult::Failure(x) => return EffectResult::Failure(from_fail::<E, C>(x)),
                     EffectResult::Pending(x) => {
-                        return EffectResult::Pending(
-                            <E::Async as IsAsyncWith<C::Async>>::from_async(x),
-                        )
+                        return EffectResult::Pending(from_async::<E, C>(x))
                     }
                 },
             }
@@ -86,8 +77,8 @@ where
     E: Effective<Produces = Multiple>,
     F: FnMut(B, E::Item) -> C,
     C: Effective<Item = B, Produces = Single>,
-    E::Async: IsAsyncWith<C::Async>,
-    E::Failure: HasFailureWith<C::Failure>,
+    E::Async: AsyncWith<C::Async>,
+    E::Failure: FallibleWith<C::Failure>,
 {
     type Output = B;
 

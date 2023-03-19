@@ -5,10 +5,9 @@ use std::{convert::Infallible, future::Future, pin::pin, task::Context};
 use futures_util::task::noop_waker_ref;
 
 use crate::{
-    blankets::TryShim,
-    utils::{HasFailureWith, IsAsyncWith, ProducesMultipleWith},
+    utils::{AsyncWith, FallibleWith, IterableWith},
     wrappers::{FromFallible, FromFuture, FromIterator},
-    Async, Blocking, EffectResult, Effective, Failure, Fallible, Multiple, Shim, Single,
+    Async, Blocking, EffectResult, Effective, Failure, Multiple, Shim, SimpleTry, Single,
 };
 
 use self::blocking::Executor;
@@ -21,22 +20,23 @@ pub mod for_each;
 pub mod map;
 pub mod unwrap;
 
-type FromTryFn<T> = fn(T) -> FromFallible<T>;
-type FromIterFn<T> = fn(T) -> FromIterator<T>;
-type FromFutFn<T> = fn(T) -> FromFuture<T>;
+pub type FromTryFn<T> = fn(T) -> FromFallible<T>;
+pub type FromIterFn<T> = fn(T) -> FromIterator<T>;
+pub type FromFutFn<T> = fn(T) -> FromFuture<T>;
+pub type FlatMap<E, F> = flatten::Flatten<map::Map<E, F>>;
 
 /// Common adaptors to [`Effective`].
 pub trait EffectiveExt: Effective {
     /// Apply the function over the items, returning a new effective, Flattening the result
     /// into a single effective.
-    fn flat_map<R, F>(self, f: F) -> flatten::Flatten<map::Map<Self, F>>
+    fn flat_map<R, F>(self, f: F) -> FlatMap<Self, F>
     where
         Self: Sized,
         F: FnMut(Self::Item) -> R,
         R: Effective,
-        Self::Produces: ProducesMultipleWith<<R as Effective>::Produces>,
-        Self::Async: IsAsyncWith<<R as Effective>::Async>,
-        Self::Failure: HasFailureWith<<R as Effective>::Failure>,
+        Self::Async: AsyncWith<<R as Effective>::Async>,
+        Self::Produces: IterableWith<<R as Effective>::Produces>,
+        Self::Failure: FallibleWith<<R as Effective>::Failure>,
     {
         self.map(f).flatten()
     }
@@ -47,39 +47,40 @@ pub trait EffectiveExt: Effective {
     ///
     /// The effective must be currently infallible. You can use `e.map(fallible).flatten()`
     /// if you already have a failure case.
-    fn flatten_fallible(self) -> flatten::Flatten<map::Map<Self, FromTryFn<Self::Item>>>
+    fn flatten_fallible(self) -> FlatMap<Self, FromTryFn<Self::Item>>
     where
         Self: Sized,
-        Self: Effective<Failure = Infallible>,
-        Self::Item: Fallible,
-        Self::Produces: ProducesMultipleWith<Single>,
-        Self::Async: IsAsyncWith<Blocking>,
+        Self: Effective,
+        Self::Item: SimpleTry,
+        Self::Async: AsyncWith<Blocking>,
+        Self::Produces: IterableWith<Single>,
+        Self::Failure: FallibleWith<Failure<<Self::Item as SimpleTry>::Break>>,
     {
-        self.map(crate::wrappers::fallible as _).flatten()
+        self.flat_map(crate::wrappers::fallible as _)
     }
 
     /// If the `Item` of this effective is a future, it pulls that future into the effective.
-    fn flatten_future(self) -> flatten::Flatten<map::Map<Self, FromFutFn<Self::Item>>>
+    fn flatten_future(self) -> FlatMap<Self, FromFutFn<Self::Item>>
     where
         Self: Sized,
         Self::Item: Future,
-        Self::Async: IsAsyncWith<Async>,
-        Self::Produces: ProducesMultipleWith<Single>,
-        Self::Failure: HasFailureWith<Infallible>,
+        Self::Async: AsyncWith<Async>,
+        Self::Produces: IterableWith<Single>,
+        Self::Failure: FallibleWith<Infallible>,
     {
-        self.map(crate::wrappers::future as _).flatten()
+        self.flat_map(crate::wrappers::future as _)
     }
 
     /// If the `Item` of this effective is an iterator, it pulls that iterator into the effective.
-    fn flatten_iterator(self) -> flatten::Flatten<map::Map<Self, FromIterFn<Self::Item>>>
+    fn flatten_iterator(self) -> FlatMap<Self, FromIterFn<Self::Item>>
     where
         Self: Sized,
         Self::Item: Iterator,
-        Self::Async: IsAsyncWith<Blocking>,
-        Self::Produces: ProducesMultipleWith<Multiple>,
-        Self::Failure: HasFailureWith<Infallible>,
+        Self::Async: AsyncWith<Blocking>,
+        Self::Produces: IterableWith<Multiple>,
+        Self::Failure: FallibleWith<Infallible>,
     {
-        self.map(crate::wrappers::iterator as _).flatten()
+        self.flat_map(crate::wrappers::iterator as _)
     }
 
     /// Map the items in the effective
@@ -132,9 +133,9 @@ pub trait EffectiveExt: Effective {
     where
         Self: Sized,
         Self::Item: Effective,
-        Self::Produces: ProducesMultipleWith<<Self::Item as Effective>::Produces>,
-        Self::Async: IsAsyncWith<<Self::Item as Effective>::Async>,
-        Self::Failure: HasFailureWith<<Self::Item as Effective>::Failure>,
+        Self::Async: AsyncWith<<Self::Item as Effective>::Async>,
+        Self::Produces: IterableWith<<Self::Item as Effective>::Produces>,
+        Self::Failure: FallibleWith<<Self::Item as Effective>::Failure>,
     {
         flatten::Flatten {
             inner: Some(self),
@@ -239,7 +240,7 @@ pub trait EffectiveExt: Effective {
     where
         Self: Sized,
         Self: Effective<Produces = Single, Async = Blocking, Failure = Failure<F>>,
-        R: Fallible<Continue = Self::Item, Break = F>,
+        R: SimpleTry<Continue = Self::Item, Break = F>,
     {
         match pin!(self).poll_effect(&mut Context::from_waker(noop_waker_ref())) {
             EffectResult::Item(x) => R::from_continue(x),
@@ -255,14 +256,6 @@ pub trait EffectiveExt: Effective {
         Self: Sized,
     {
         Shim { inner: self }
-    }
-
-    /// Return a [`shim`](Shim) that implements either [`TryFuture`](futures_core::TryFuture), [`TryStream`](futures_core::TryStream) or [`Iterator`]
-    fn try_shim(self) -> TryShim<Self>
-    where
-        Self: Sized,
-    {
-        TryShim { inner: self }
     }
 
     /// High level fold function. Takes all the items in the effective and applies the `func` to it,

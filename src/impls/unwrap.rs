@@ -22,14 +22,13 @@ where
     type Produces = E::Produces;
     type Async = E::Async;
 
-    fn poll_effect(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> EffectResult<Self::Item, Self::Failure, Self::Produces, Self::Async> {
+    fn poll_effect(self: Pin<&mut Self>, cx: &mut Context<'_>) -> crate::EffectiveResult<Self> {
         let mut this = self.project();
         match this.inner.as_mut().poll_effect(cx) {
             EffectResult::Item(x) => EffectResult::Item(x),
-            EffectResult::Failure(x) => panic!("{x:?}"),
+            EffectResult::Failure(x) => {
+                panic!("called `EffectiveExt::unwrap()` on an `Failure`: value {x:?}")
+            }
             EffectResult::Done(x) => EffectResult::Done(x),
             EffectResult::Pending(x) => EffectResult::Pending(x),
         }

@@ -1,6 +1,6 @@
 use std::{convert::Infallible, pin::Pin, task::Context};
 
-use crate::{Blocking, EffectResult, Effective, Single};
+use crate::{Blocking, EffectResult, Effective, EffectiveResult, Single};
 
 /// Create an `Effective` that returns a single value, no failures and no async
 pub fn once<T>(t: T) -> Once<T> {
@@ -19,10 +19,7 @@ impl<T> Effective for Once<T> {
     type Produces = Single;
     type Async = Blocking;
 
-    fn poll_effect(
-        self: Pin<&mut Self>,
-        _: &mut Context<'_>,
-    ) -> EffectResult<T, Infallible, Single, Blocking> {
+    fn poll_effect(self: Pin<&mut Self>, _: &mut Context<'_>) -> EffectiveResult<Self> {
         let x = self
             .project()
             .inner

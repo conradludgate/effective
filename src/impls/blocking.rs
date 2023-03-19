@@ -32,10 +32,7 @@ where
     type Produces = E::Produces;
     type Async = Blocking;
 
-    fn poll_effect(
-        self: Pin<&mut Self>,
-        _: &mut Context<'_>,
-    ) -> EffectResult<Self::Item, Self::Failure, Self::Produces, Self::Async> {
+    fn poll_effect(self: Pin<&mut Self>, _: &mut Context<'_>) -> crate::EffectiveResult<Self> {
         let mut this = self.project();
         this.executor
             .block_on(poll_fn(|cx| match this.inner.as_mut().poll_effect(cx) {

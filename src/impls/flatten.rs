@@ -3,8 +3,11 @@
 use std::{pin::Pin, task::Context};
 
 use crate::{
-    utils::{HasFailureWith, IsAsyncWith, ProducesMultipleWith},
-    EffectResult, Effective, Produces,
+    utils::{
+        from_async, from_fail, AsyncPair, AsyncWith, FalliblePair, FallibleWith, IterablePair,
+        IterableWith,
+    },
+    EffectResult, Effective, Iterable,
 };
 
 pin_project_lite::pin_project!(
@@ -24,40 +27,32 @@ impl<E> Effective for Flatten<E>
 where
     E: Effective,
     E::Item: Effective,
-    E::Produces: ProducesMultipleWith<<E::Item as Effective>::Produces>,
-    E::Async: IsAsyncWith<<E::Item as Effective>::Async>,
-    E::Failure: HasFailureWith<<E::Item as Effective>::Failure>,
+    E::Produces: IterableWith<<E::Item as Effective>::Produces>,
+    E::Async: AsyncWith<<E::Item as Effective>::Async>,
+    E::Failure: FallibleWith<<E::Item as Effective>::Failure>,
 {
     type Item = <E::Item as Effective>::Item;
-    type Produces =
-        <E::Produces as ProducesMultipleWith<<E::Item as Effective>::Produces>>::Produces;
-    type Async = <E::Async as IsAsyncWith<<E::Item as Effective>::Async>>::IsAsync;
-    type Failure = <E::Failure as HasFailureWith<<E::Item as Effective>::Failure>>::Failure;
+    type Produces = IterablePair<E, E::Item>;
+    type Async = AsyncPair<E, E::Item>;
+    type Failure = FalliblePair<E, E::Item>;
 
-    fn poll_effect(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> EffectResult<Self::Item, Self::Failure, Self::Produces, Self::Async> {
+    fn poll_effect(self: Pin<&mut Self>, cx: &mut Context<'_>) -> crate::EffectiveResult<Self> {
         let mut this = self.project();
         loop {
             if let Some(flatten) = this.flatten.as_mut().as_pin_mut() {
                 match flatten.poll_effect(cx) {
                     EffectResult::Done(_) => this.flatten.set(None),
                     EffectResult::Failure(x) => {
-                        return EffectResult::Failure(<E::Failure as HasFailureWith<
-                            <E::Item as Effective>::Failure,
-                        >>::from_fail(x))
+                        return EffectResult::Failure(from_fail::<E, E::Item>(x))
                     }
                     EffectResult::Item(x) => {
-                        if !<<E::Item as Effective>::Produces as Produces>::MULTIPLE {
+                        if !<<E::Item as Effective>::Produces as Iterable>::MULTIPLE {
                             this.flatten.set(None);
                         }
                         return EffectResult::Item(x);
                     }
                     EffectResult::Pending(x) => {
-                        return EffectResult::Pending(<E::Async as IsAsyncWith<
-                            <E::Item as Effective>::Async,
-                        >>::from_async(x))
+                        return EffectResult::Pending(from_async::<E, E::Item>(x))
                     }
                 }
             }
@@ -65,7 +60,7 @@ where
             if let Some(inner) = this.inner.as_mut().as_pin_mut() {
                 match inner.poll_effect(cx) {
                     EffectResult::Item(x) => {
-                        if !<E::Produces as Produces>::MULTIPLE {
+                        if !<E::Produces as Iterable>::MULTIPLE {
                             this.inner.set(None);
                         }
                         this.flatten.set(Some(x))
@@ -76,19 +71,19 @@ where
                 }
             } else {
                 use crate::SealedMarker;
-                return EffectResult::Done(<<E::Produces as ProducesMultipleWith<
+                return EffectResult::Done(<<E::Produces as IterableWith<
                     <E::Item as Effective>::Produces,
-                >>::Produces as SealedMarker>::new());
+                >>::IsIterable as SealedMarker>::new());
             }
         }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        if <E::Produces as Produces>::MULTIPLE
-            && <<E::Item as Effective>::Produces as Produces>::MULTIPLE
+        if <E::Produces as Iterable>::MULTIPLE
+            && <<E::Item as Effective>::Produces as Iterable>::MULTIPLE
         {
             (0, None)
-        } else if <E::Produces as Produces>::MULTIPLE {
+        } else if <E::Produces as Iterable>::MULTIPLE {
             if let Some(inner) = self.inner.as_ref() {
                 inner.size_hint()
             } else {

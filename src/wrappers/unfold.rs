@@ -1,3 +1,5 @@
+use std::{pin::Pin, task::Context};
+
 use crate::{EffectResult, Effective, Multiple, Single};
 
 /// Creates a `Effective` with multiple values from a seed and
@@ -56,10 +58,7 @@ where
     type Async = E::Async;
     type Produces = Multiple;
 
-    fn poll_effect(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> EffectResult<Self::Item, Self::Failure, Self::Produces, Self::Async> {
+    fn poll_effect(self: Pin<&mut Self>, cx: &mut Context<'_>) -> crate::EffectiveResult<Self> {
         let mut this = self.project();
         loop {
             match this.state.as_mut().project() {

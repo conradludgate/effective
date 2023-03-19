@@ -1,6 +1,6 @@
 use std::{convert::Infallible, pin::Pin, task::Context};
 
-use crate::{Asynchronous, Blocking, EffectResult, Effective, Fails, Single};
+use crate::{Asynchrony, Blocking, EffectResult, Effective, EffectiveResult, Fallible, Single};
 
 /// Create a raw `Effective` from a function
 pub fn from_fn<F>(f: F) -> FromFn<F> {
@@ -21,19 +21,16 @@ pin_project_lite::pin_project!(
 impl<F, Item, Failure, Produces, Async> Effective for FromFn<F>
 where
     F: FnMut(&mut Context<'_>) -> EffectResult<Item, Failure, Produces, Async>,
-    Failure: Fails,
-    Produces: crate::Produces,
-    Async: Asynchronous,
+    Failure: Fallible,
+    Produces: crate::Iterable,
+    Async: Asynchrony,
 {
     type Item = Item;
     type Failure = Failure;
     type Produces = Produces;
     type Async = Async;
 
-    fn poll_effect(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> EffectResult<Item, Failure, Produces, Async> {
+    fn poll_effect(self: Pin<&mut Self>, cx: &mut Context<'_>) -> EffectiveResult<Self> {
         (self.project().inner)(cx)
     }
 }
@@ -53,10 +50,7 @@ where
     type Produces = Single;
     type Async = Blocking;
 
-    fn poll_effect(
-        self: Pin<&mut Self>,
-        _: &mut Context<'_>,
-    ) -> EffectResult<R, Infallible, Single, Blocking> {
+    fn poll_effect(self: Pin<&mut Self>, _: &mut Context<'_>) -> EffectiveResult<Self> {
         let x = self
             .project()
             .inner

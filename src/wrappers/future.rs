@@ -28,10 +28,7 @@ impl<F: Future> Effective for FromFuture<F> {
     type Produces = Single;
     type Async = Async;
 
-    fn poll_effect(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> EffectResult<Self::Item, Self::Failure, Self::Produces, Self::Async> {
+    fn poll_effect(self: Pin<&mut Self>, cx: &mut Context<'_>) -> crate::EffectiveResult<Self> {
         match self.project().inner.poll(cx) {
             Poll::Ready(x) => EffectResult::Item(x),
             Poll::Pending => EffectResult::Pending(Async),

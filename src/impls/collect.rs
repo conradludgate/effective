@@ -4,7 +4,7 @@ use std::{convert::Infallible, pin::Pin, task::Context};
 
 use futures_util::task::noop_waker_ref;
 
-use crate::{Async, Asynchronous, EffectResult, Effective, Fails, Multiple, Single};
+use crate::{Async, Asynchrony, EffectResult, Effective, Fallible, Multiple, Single};
 
 pin_project_lite::pin_project!(
     /// Produced by the [`collect()`](super::EffectiveExt::collect) method
@@ -25,13 +25,10 @@ where
     type Produces = Single;
     type Async = E::Async;
 
-    fn poll_effect(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> EffectResult<Self::Item, Self::Failure, Self::Produces, Self::Async> {
+    fn poll_effect(self: Pin<&mut Self>, cx: &mut Context<'_>) -> crate::EffectiveResult<Self> {
         let mut this = self.project();
 
-        if !<Self::Async as Asynchronous>::IS_ASYNC && !<Self::Failure as Fails>::FALLIBLE {
+        if !<Self::Async as Asynchrony>::IS_ASYNC && !<Self::Failure as Fallible>::FALLIBLE {
             this.into.extend(CollectIterator { inner: this.inner });
             return EffectResult::Item(std::mem::take(this.into));
         }

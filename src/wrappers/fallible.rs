@@ -1,6 +1,6 @@
 use std::{pin::Pin, task::Context};
 
-use crate::{Blocking, EffectResult, Effective, Failure, Fallible, Single};
+use crate::{Blocking, EffectResult, Effective, EffectiveResult, Failure, SimpleTry, Single};
 
 /// Create an [`Effective`] that has a failure, a single value and no async
 pub fn fallible<T>(t: T) -> FromFallible<T> {
@@ -13,16 +13,13 @@ pin_project_lite::pin_project!(
     }
 );
 
-impl<T: Fallible> Effective for FromFallible<T> {
+impl<T: SimpleTry> Effective for FromFallible<T> {
     type Item = T::Continue;
     type Failure = Failure<T::Break>;
     type Produces = Single;
     type Async = Blocking;
 
-    fn poll_effect(
-        self: Pin<&mut Self>,
-        _: &mut Context<'_>,
-    ) -> EffectResult<T::Continue, Failure<T::Break>, Single, Blocking> {
+    fn poll_effect(self: Pin<&mut Self>, _: &mut Context<'_>) -> EffectiveResult<Self> {
         let this = self.project();
         let x = this.inner.take().expect("polled after completion");
         match x.branch() {

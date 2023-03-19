@@ -21,10 +21,7 @@ impl<I: Iterator> Effective for FromIterator<I> {
     type Produces = Multiple;
     type Async = Blocking;
 
-    fn poll_effect(
-        self: Pin<&mut Self>,
-        _: &mut Context<'_>,
-    ) -> EffectResult<Self::Item, Self::Failure, Self::Produces, Self::Async> {
+    fn poll_effect(self: Pin<&mut Self>, _: &mut Context<'_>) -> crate::EffectiveResult<Self> {
         match self.project().inner.next() {
             Some(x) => EffectResult::Item(x),
             None => EffectResult::Done(Multiple),
