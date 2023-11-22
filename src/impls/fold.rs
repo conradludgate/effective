@@ -61,7 +61,7 @@ where
                 },
                 StateProj::Eff { eff } => match eff.poll_effect(cx) {
                     EffectResult::Item(item) => this.state.set(State::Acc { item: Some(item) }),
-                    EffectResult::Done(_) => unreachable!(),
+                    EffectResult::Done(x) => match x {},
                     EffectResult::Failure(x) => return EffectResult::Failure(from_fail::<E, C>(x)),
                     EffectResult::Pending(x) => {
                         return EffectResult::Pending(from_async::<E, C>(x))
@@ -86,7 +86,7 @@ where
         match self.poll_effect(cx) {
             EffectResult::Item(value) => std::task::Poll::Ready(value),
             EffectResult::Failure(_) => unreachable!(),
-            EffectResult::Done(_) => unreachable!(),
+            EffectResult::Done(x) => match x {},
             EffectResult::Pending(_) => std::task::Poll::Pending,
         }
     }

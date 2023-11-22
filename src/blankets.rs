@@ -30,7 +30,7 @@ where
             EffectResult::Item(x) => Some(success::<E>(x)),
             EffectResult::Failure(x) => Some(failure::<E>(x)),
             EffectResult::Done(Multiple) => None,
-            EffectResult::Pending(_) => unreachable!(),
+            EffectResult::Pending(x) => match x {},
         }
     }
 }
@@ -45,7 +45,7 @@ where
         match self.project().inner.poll_effect(cx) {
             EffectResult::Item(x) => Poll::Ready(success::<E>(x)),
             EffectResult::Failure(x) => Poll::Ready(failure::<E>(x)),
-            EffectResult::Done(_) => unreachable!(),
+            EffectResult::Done(x) => match x {},
             EffectResult::Pending(Async) => Poll::Pending,
         }
     }
@@ -60,7 +60,7 @@ where
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match self.project().inner.poll_effect(cx) {
             EffectResult::Item(x) => Poll::Ready(Some(success::<E>(x))),
-            EffectResult::Failure(x) => Poll::Ready(Some(failure::<E>(x))),
+            EffectResult::Failure(x) => match x {},
             EffectResult::Done(Multiple) => Poll::Ready(None),
             EffectResult::Pending(Async) => Poll::Pending,
         }

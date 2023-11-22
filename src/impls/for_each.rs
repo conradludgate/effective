@@ -82,7 +82,7 @@ where
         match self.poll_effect(cx) {
             EffectResult::Item(value) => std::task::Poll::Ready(value),
             EffectResult::Failure(_) => unreachable!(),
-            EffectResult::Done(_) => unreachable!(),
+            EffectResult::Done(x) => match x {},
             EffectResult::Pending(_) => std::task::Poll::Pending,
         }
     }

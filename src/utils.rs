@@ -6,8 +6,6 @@ use crate::{
     Async, Asynchrony, Blocking, Effective, Failure, Fallible, Iterable, Multiple, Single,
 };
 
-use crate::SealedMarker;
-
 /// Represents the asynchrony of a flattened effective.
 ///
 /// # Examples:
@@ -16,28 +14,56 @@ use crate::SealedMarker;
 /// * `blocking(blocking(1))` represents a [`Blocking`] with [`Blocking`] inside, so it overall represents [`Blocking`]
 pub trait AsyncWith<Rhs>: Sized {
     type IsAsync: Asynchrony;
-    fn into_async(self) -> Self::IsAsync {
-        <Self::IsAsync>::new()
-    }
-    fn from_async(_: Rhs) -> Self::IsAsync {
-        <Self::IsAsync>::new()
-    }
+    fn into_async(self) -> Self::IsAsync;
+    fn from_async(_: Rhs) -> Self::IsAsync;
 }
 
 impl AsyncWith<Async> for Async {
     type IsAsync = Async;
+
+    fn into_async(self) -> Self::IsAsync {
+        self
+    }
+
+    fn from_async(x: Async) -> Self::IsAsync {
+        x
+    }
 }
 
 impl AsyncWith<Async> for Blocking {
     type IsAsync = Async;
+
+    fn into_async(self) -> Self::IsAsync {
+        match self {}
+    }
+
+    fn from_async(x: Async) -> Self::IsAsync {
+        x
+    }
 }
 
 impl AsyncWith<Blocking> for Async {
     type IsAsync = Async;
+
+    fn into_async(self) -> Self::IsAsync {
+        self
+    }
+
+    fn from_async(x: Blocking) -> Self::IsAsync {
+        match x {}
+    }
 }
 
 impl AsyncWith<Blocking> for Blocking {
     type IsAsync = Blocking;
+
+    fn into_async(self) -> Self::IsAsync {
+        match self {}
+    }
+
+    fn from_async(x: Blocking) -> Self::IsAsync {
+        match x {}
+    }
 }
 
 /// Represents the minimum number of output items from a flattened effective.
@@ -89,7 +115,7 @@ where
 impl<F> FallibleWith<Failure<F>> for Infallible {
     type Failure = Failure<F>;
     fn into_fail(self) -> Self::Failure {
-        unreachable!()
+        match self {}
     }
     fn from_fail(x: Failure<F>) -> Self::Failure {
         x
@@ -101,8 +127,8 @@ impl<F> FallibleWith<Infallible> for Failure<F> {
     fn into_fail(self) -> Self::Failure {
         self
     }
-    fn from_fail(_: Infallible) -> Self::Failure {
-        unreachable!()
+    fn from_fail(x: Infallible) -> Self::Failure {
+        match x {}
     }
 }
 

@@ -73,7 +73,7 @@ where
                     }
                     EffectResult::Item(None) => return EffectResult::Done(Multiple),
                     EffectResult::Failure(x) => return EffectResult::Failure(x),
-                    EffectResult::Done(_) => unreachable!(),
+                    EffectResult::Done(x) => match x {},
                     EffectResult::Pending(x) => return EffectResult::Pending(x),
                 },
             }

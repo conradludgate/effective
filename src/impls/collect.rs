@@ -28,6 +28,7 @@ where
     fn poll_effect(self: Pin<&mut Self>, cx: &mut Context<'_>) -> crate::EffectiveResult<Self> {
         let mut this = self.project();
 
+        // specialisation
         if !<Self::Async as Asynchrony>::IS_ASYNC && !<Self::Failure as Fallible>::FALLIBLE {
             this.into.extend(CollectIterator { inner: this.inner });
             return EffectResult::Item(std::mem::take(this.into));
@@ -50,6 +51,7 @@ struct CollectIterator<'a, E> {
     inner: Pin<&'a mut E>,
 }
 
+// specialisation
 impl<E> Iterator for CollectIterator<'_, E>
 where
     E: Effective<Produces = Multiple>,
@@ -84,8 +86,8 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> std::task::Poll<Self::Output> {
         match self.poll_effect(cx) {
             EffectResult::Item(value) => std::task::Poll::Ready(value),
-            EffectResult::Failure(_) => unreachable!(),
-            EffectResult::Done(_) => unreachable!(),
+            EffectResult::Failure(x) => match x {},
+            EffectResult::Done(x) => match x {},
             EffectResult::Pending(_) => std::task::Poll::Pending,
         }
     }

@@ -156,7 +156,7 @@ impl Fallible for Infallible {
         t
     }
     fn failure<T>(self) -> Self::Result<T> {
-        unreachable!()
+        match self {}
     }
 
     const FALLIBLE: bool = false;

@@ -229,9 +229,9 @@ pub trait EffectiveExt: Effective {
     {
         match pin!(self).poll_effect(&mut Context::from_waker(noop_waker_ref())) {
             EffectResult::Item(x) => x,
-            EffectResult::Failure(_) => unreachable!(),
-            EffectResult::Done(_) => unreachable!(),
-            EffectResult::Pending(_) => unimplemented!(),
+            EffectResult::Failure(x) => match x {},
+            EffectResult::Done(x) => match x {},
+            EffectResult::Pending(x) => match x {},
         }
     }
 
@@ -245,7 +245,7 @@ pub trait EffectiveExt: Effective {
         match pin!(self).poll_effect(&mut Context::from_waker(noop_waker_ref())) {
             EffectResult::Item(x) => R::from_continue(x),
             EffectResult::Failure(x) => R::from_break(x.0),
-            EffectResult::Done(_) => unreachable!(),
+            EffectResult::Done(x) => match x {},
             EffectResult::Pending(_) => unimplemented!(),
         }
     }
